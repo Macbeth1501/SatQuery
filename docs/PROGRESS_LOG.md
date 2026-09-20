@@ -36,7 +36,7 @@ inference layer is stubbed.
 | React frontend, 3 routes, 15 components | Complete, verified in-browser |
 | Test suite: 152 pytest + 58 Vitest tests | All passing (12 new in `tests/test_ml.py`, which skip when scikit-learn, scipy or torch are missing) |
 | Demo inputs | Seven georeferenced GeoTIFFs in `frontend/public/demo/` (scenarios A, C, D, E, and G which reuses C's pair reversed); B and F stay plain PNGs on purpose. Georeferencing is real, the pictures are synthetic |
-| ML training side (`ml/`) | B1 thin slice built and verified; B5 LoRA train/eval/notebook written; baseline evaluated; **first thin adapter trained locally (300 steps, 3 h 38 min) and scored on the bench sample** (`data/b5_run1/adapter_final`, `data/b5_eval/tuned.json`). Not wired into the backend. `ml/` has no automated tests |
+| ML training side (`ml/`) | B1 thin slice built and verified; B5 LoRA train/eval/notebook written; baseline evaluated; **first thin adapter trained locally (300 steps, 3 h 38 min) and scored on the bench sample** (`data/b5_run1/adapter_final`, `data/b5_eval/tuned.json`). Not wired into the backend. `tests/test_ml.py` (12 tests) covers the CPU-side pieces (option parser, text-only baseline, raking, sampler, McNemar, answer parser); training, extraction and GPU evaluation have no automated tests |
 | **Specialist inference** | **Dummy — `ScenarioEngine` lookup, no model** |
 | **Optical/SAR fusion** | **Dummy — hardcoded region tags** |
 | Raster metadata extraction | Read from the file (CRS, bands, GSD, footprint, NoData, timestamp) |
@@ -66,6 +66,12 @@ fusion query, returning HTTP 200 with a full trace rather than an error.
 
 ## Next step
 
+**Standing (2026-09-20, plan approved by the owner, awaiting "go"):** `docs/STARTUP_GUIDE.md` is written (how to start
+the demo and a manual test checklist; not yet walked through in a browser). The Phase 2 plan is approved: VRAM gate,
+control, the two missing code pieces (optimiser save **and** `--resume`; `ml/b5_change_rate.py`), retrain, six-run
+scoring. Nothing has run on the GPU and nothing under `ml/` has changed. Free VRAM read 2,902 MiB (below the ~3,100 bar;
+the desktop apps must be closed before the retrain).
+
 **Decision taken 2026-09-20 (owner): train the first B5 adapter locally, not on Kaggle.** This rests on the
 measured dry runs recorded in the Development Plan under D2 (QLoRA fit on the RTX 3050); it amends D2's
 "training goes to the cloud" for this first run. The Kaggle notebook stays as the scale-up path.
@@ -85,13 +91,13 @@ measured dry runs recorded in the Development Plan under D2 (QLoRA fit on the RT
    held-out-tile test built from the raw bench archive; (c) B6 (grounding boxes) or C0. Scaling the current
    recipe is not recommended. See the History entries.
 3. **Decision taken 2026-09-20 (owner): route (a), with the filter replaced by leak-neutral resampling.**
-   **Phase 1 (CPU only) is done and uncommitted; Phase 2 (about 5 GPU hours) has NOT started and waits for the
+   **Phase 1 (CPU only) is done and uncommitted; Phase 2 (about 7 GPU hours: control ~1 h 20, retrain ~3 h 40, six scoring runs ~2 h 15) has NOT started and waits for the
    owner to commit and reboot.** Phase 1 built `data/b1_v2/` (19,489 training and 1,197 validation examples on
    17,121 and 1,017 patches, 6 Sentinel tiles reserved) and `data/b1_v2/bench_hard.jsonl` (3,000 examples), and
    the text-only baseline scores at chance on all of them (History, newest entry). Phase 2 order: (i) re-score
-   `adapter_final` on `bench_hard`, real image, grey image and mismatched image (the control, about 40 min; it
+   `adapter_final` on `bench_hard`, real image, grey image and mismatched image (the control, about 80 min for three conditions on `--part main`; it
    may make a retrain unnecessary); (ii) retrain on `data/b1_v2` (~3 h 40 min) after `b5_train_lora.py` is
-   pointed at it and made to save optimiser state; (iii) score the new adapter and compare with
+   made to save and restore optimiser state (`--data data/b1_v2` already works; no re-pointing is needed); (iii) score the new adapter and compare with
    `ml/b5_compare.py` against the pass/fail test in the plan. Free VRAM read 3,303 MiB at the end of Phase 1.
 4. Nothing may be wired into `backend/` before C0.
 
@@ -110,6 +116,7 @@ Development Plan §10.5 has the full breakdown.
 | Backend (local) | `http://127.0.0.1:8000` | Run manually |
 | API docs (local) | `http://127.0.0.1:8000/docs` | Run manually |
 | Frontend (local) | `http://localhost:5173` | Run manually |
+| Source repository | `https://github.com/Macbeth1501/SatQuery` | Fresh single-commit history created by the owner 2026-09-20; earlier commit hashes quoted in this log no longer exist there |
 | Staging | — | Not deployed |
 | Production | — | Not deployed |
 
@@ -159,7 +166,7 @@ Real, known, not yet fixed (as opposed to "Known limitations", which are accepte
    RTX 3050 with 4 GB usable VRAM). **D2's "training goes to the cloud" was amended by measurement and then
    by the owner: QLoRA does fit on this card, and the first adapter was trained locally** (300 steps,
    3 h 38 min, peak 2,913 MiB). So training code and one adapter now exist — `ml/b1_slice.py`,
-   `ml/b5_common.py`, `ml/b5_train_lora.py`, `ml/b5_eval.py`, and `data/b5_run1/adapter_final` — and the
+   `ml/b5_common.py`, `ml/b5_train_lora.py`, `ml/b5_eval.py`, `ml/b1_v2.py`, `ml/b5_deleak.py`, `ml/b5_text_only.py`, `ml/b5_compare.py`, and `data/b5_run1/adapter_final` — and the
    dataset work is the B1 thin slice plus the extracted `bench` subset of BigEarthNet.txt (see History).
    What is *not* built: any evidence that the adapter reads imagery, and any link to `backend/`.
    The revision is pinned: `895c3a49bc3fa70a340399125c650a463535e71c`, downloaded to
@@ -199,7 +206,7 @@ Things that were changed but not confirmed the way a user would meet them:
   (still expected to overrun 4 GB; cloud training stands, unmeasured here). It is `torch` peak *allocated*
   memory, not the card's total use, and it ran with 3,303 MiB free because the Windows desktop already held
   about 800 MiB. It says nothing about a LoRA adapter's added memory or about adapter switching latency.
-- **`ml/` has no automated tests.** B1's guarantees (disjoint patches, buffer distance) were checked by an
+- **Only the CPU-side `ml/` code has automated tests** (`tests/test_ml.py`, 12 tests); B1's guarantees (disjoint patches, buffer distance) were checked by an
   ad-hoc script, not a committed test. The 300-step local run (bfloat16) completed with no non-finite loss,
   and the saved adapter reloads and changes outputs (checked 2026-09-20). Training loss did NOT visibly fall
   (single-step readings stay in about 0.19-0.50 from step 196 to 300); only validation loss fell (0.633,
@@ -243,6 +250,39 @@ Accepted for the prototype, not defects to fix now:
 ---
 
 ## History
+
+### 2026-09-20 — Phase 2 planned (owner-approved); startup guide written; six stale statements corrected
+
+Read-only orientation, then a plan the owner approved. **Measured:** 152 pytest passing; free VRAM **2,902 MiB** (1,194
+of 4,096 in use by Chrome, Edge WebView2, VS Code and others), below the ~3,100 MiB bar, so the retrain needs those
+apps closed or `--size 392`; `data/b1_v2/` matches this log (19,489 / 1,197 / 3,000, all bench rows carry `pair_image`).
+**Owner decisions:** full six-run scoring matrix (Phase 2 is ~7 h, not ~5); optimiser state saved **and** a `--resume`
+flag; more bench-side patches proposed but **not** run in Phase 2.
+
+**Corrections to this log:** "`ml/` has no automated tests" (twice; `tests/test_ml.py` has 12); the control estimate
+(about 40 min, now about 80 min for three conditions); the Phase 2 total (5 h, now ~7 h); "point `b5_train_lora.py` at
+the new data" (`--data` already does it); Open item 4 omitted four `ml/` files. **`CLAUDE.md`** described `ml/` as it was
+before Phase 1; its ML paragraph is corrected.
+
+**New:** `docs/STARTUP_GUIDE.md` (start the stack, seven-scenario demo script, tickable manual checklist, known rough
+edges, troubleshooting). Its scenario table is taken from `frontend/src/data/demoParity.json`; the box counts come from
+this log's earlier verified table. **It has not been walked through in a browser this session.** No code, GPU or
+`backend/`/`frontend/` change. Files (uncommitted): `docs/STARTUP_GUIDE.md`, `docs/PROGRESS_LOG.md`.
+
+### 2026-09-20 — Handoff written for a plan-mode Phase 2; knowledge graph partly refreshed
+
+`docs/HANDOFF_PROMPT.md` was rewritten: the next session starts in plan mode, orients read-only, and plans Phase 2
+(control run, two missing pieces of code, retrain, judging) before any GPU use. The owner created
+`https://github.com/Macbeth1501/SatQuery` with a fresh single-commit history.
+
+**Graph.** `graphify update .` (code) rebuilt the code graph: 1,031 nodes, 2,240 edges, 58 communities, current
+for all `ml/` and `tests/` files. An attempted `/graphify . --update` for the nine changed documents was **not
+applied**: the extraction agent skimmed `PROGRESS_LOG.md`, `HANDOFF_PROMPT.md` and the Development Plan and used
+placeholders for `frontend/index.html`, and the merge would have shrunk the graph to 997 nodes (-34) because a
+shallow re-extraction replaced 432 richer nodes; graphify's shrink guard refused to overwrite, and it was not
+forced. **`graph.json` is unchanged (1,031 nodes) and does not contain the new documents' concepts.** The nine
+files were stamped in the manifest and cached, so a later `--update` will not re-extract them; run
+`/graphify . --force` or a full `/graphify .` to rebuild the document layer properly.
 
 ### 2026-09-20 — Phase 1 done: leak-neutral training set and `bench_hard` built (CPU only, no GPU)
 
