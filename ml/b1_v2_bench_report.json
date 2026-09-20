@@ -1,0 +1,220 @@
+{
+ "reserved_tiles": [
+  "T29SND",
+  "T29UPU",
+  "T32TMT",
+  "T34TCR",
+  "T34UEG",
+  "T34WFS"
+ ],
+ "parts": {
+  "main": {
+   "patches": 712,
+   "rake": {
+    "binary/adjacency": {
+     "in": 1782,
+     "effective_n": 1356,
+     "kept": 511,
+     "worst_rate_error_after_raking": 0.0238
+    },
+    "binary/area": {
+     "in": 859,
+     "effective_n": 375,
+     "kept": 92,
+     "worst_rate_error_after_raking": 0.0218
+    },
+    "binary/count": {
+     "in": 857,
+     "effective_n": 196,
+     "kept": 87,
+     "worst_rate_error_after_raking": 0.0115
+    },
+    "binary/presence": {
+     "in": 957,
+     "effective_n": 851,
+     "kept": 496,
+     "worst_rate_error_after_raking": 0.0074
+    },
+    "mcq/adjacency": {
+     "in": 802,
+     "effective_n": 687,
+     "kept": 254,
+     "worst_rate_error_after_raking": 0.0
+    },
+    "mcq/area": {
+     "in": 423,
+     "effective_n": 269,
+     "kept": 196,
+     "worst_rate_error_after_raking": 0.0
+    },
+    "mcq/climate zone": {
+     "in": 418,
+     "effective_n": 12,
+     "kept": 6,
+     "worst_rate_error_after_raking": 0.0
+    },
+    "mcq/count": {
+     "in": 355,
+     "effective_n": 18,
+     "kept": 9,
+     "worst_rate_error_after_raking": 0.0047
+    },
+    "mcq/country": {
+     "in": 192,
+     "effective_n": 4,
+     "kept": 4,
+     "worst_rate_error_after_raking": 0.0
+    },
+    "mcq/presence": {
+     "in": 447,
+     "effective_n": 223,
+     "kept": 84,
+     "worst_rate_error_after_raking": 0.0
+    },
+    "mcq/relative pos": {
+     "in": 392,
+     "effective_n": 37,
+     "kept": 21,
+     "worst_rate_error_after_raking": 0.0
+    },
+    "mcq/season": {
+     "in": 372,
+     "effective_n": 249,
+     "kept": 86,
+     "worst_rate_error_after_raking": 0.0
+    }
+   },
+   "examples_by_type": {
+    "mcq": 660,
+    "binary": 1186
+   }
+  },
+  "heldout": {
+   "patches": 362,
+   "rake": {
+    "binary/adjacency": {
+     "in": 1075,
+     "effective_n": 792,
+     "kept": 282,
+     "worst_rate_error_after_raking": 0.0213
+    },
+    "binary/area": {
+     "in": 447,
+     "effective_n": 302,
+     "kept": 102,
+     "worst_rate_error_after_raking": 0.0111
+    },
+    "binary/count": {
+     "in": 449,
+     "effective_n": 121,
+     "kept": 39,
+     "worst_rate_error_after_raking": 0.0165
+    },
+    "binary/presence": {
+     "in": 501,
+     "effective_n": 426,
+     "kept": 184,
+     "worst_rate_error_after_raking": 0.0022
+    },
+    "mcq/adjacency": {
+     "in": 509,
+     "effective_n": 501,
+     "kept": 255,
+     "worst_rate_error_after_raking": 0.0
+    },
+    "mcq/area": {
+     "in": 230,
+     "effective_n": 223,
+     "kept": 183,
+     "worst_rate_error_after_raking": 0.0
+    },
+    "mcq/climate zone": {
+     "in": 257,
+     "effective_n": 4,
+     "kept": 4,
+     "worst_rate_error_after_raking": 0.0
+    },
+    "mcq/count": {
+     "in": 183,
+     "effective_n": 7,
+     "kept": 5,
+     "worst_rate_error_after_raking": 0.0
+    },
+    "mcq/country": {
+     "in": 120,
+     "effective_n": 3,
+     "kept": 4,
+     "worst_rate_error_after_raking": 0.0
+    },
+    "mcq/presence": {
+     "in": 262,
+     "effective_n": 9,
+     "kept": 8,
+     "worst_rate_error_after_raking": 0.0
+    },
+    "mcq/relative pos": {
+     "in": 260,
+     "effective_n": 20,
+     "kept": 10,
+     "worst_rate_error_after_raking": 0.0005
+    },
+    "mcq/season": {
+     "in": 201,
+     "effective_n": 158,
+     "kept": 78,
+     "worst_rate_error_after_raking": 0.0
+    }
+   },
+   "examples_by_type": {
+    "binary": 607,
+    "mcq": 547
+   }
+  }
+ },
+ "text_only_on_bench_hard": {
+  "leaky_run1_slice": {
+   "main": {
+    "binary": {
+     "acc": 0.5008431703204047,
+     "n": 1186
+    },
+    "mcq": {
+     "acc": 0.35,
+     "n": 660
+    }
+   },
+   "heldout": {
+    "binary": {
+     "acc": 0.5321252059308073,
+     "n": 607
+    },
+    "mcq": {
+     "acc": 0.3619744058500914,
+     "n": 547
+    }
+   }
+  },
+  "deleaked_v2_slice": {
+   "main": {
+    "binary": {
+     "acc": 0.4924114671163575,
+     "n": 1186
+    },
+    "mcq": {
+     "acc": 0.2590909090909091,
+     "n": 660
+    }
+   },
+   "heldout": {
+    "binary": {
+     "acc": 0.5057660626029654,
+     "n": 607
+    },
+    "mcq": {
+     "acc": 0.24314442413162707,
+     "n": 547
+    }
+   }
+  }
+ }
+}

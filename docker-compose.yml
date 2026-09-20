@@ -1,0 +1,44 @@
+# One command: docker compose up --build
+#   frontend  http://localhost:8080
+#   API       http://localhost:8000  (docs at /docs)
+#
+# Configuration: copy .env.example to .env to override any SATQUERY_* tunable; compose loads
+# it into the backend if present. Do not set SATQUERY_HOST, _PORT or _STORAGE_DIR there:
+# they are fixed below because they describe the container, not the deployment.
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SATQUERY_HOST: 0.0.0.0
+      SATQUERY_PORT: "8000"
+      SATQUERY_STORAGE_DIR: /data
+      # Browser origins allowed to call the API: where the frontend below is published.
+      SATQUERY_CORS_ORIGINS: ${SATQUERY_CORS_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+    volumes:
+      - satquery-data:/data
+    ports:
+      # Loopback only, matching the backend's default bind. Widen deliberately.
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # The address the browser uses to reach the API (baked in at build time).
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://127.0.0.1:8000}
+    depends_on:
+      backend:
+        # Start order alone is not readiness: wait for the backend HEALTHCHECK to pass.
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:80"
+    restart: unless-stopped
+
+volumes:
+  satquery-data:

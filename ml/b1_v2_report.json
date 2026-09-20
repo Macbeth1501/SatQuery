@@ -1,0 +1,294 @@
+{
+ "rules": {
+  "seed": 20260920,
+  "buffer_cells": 2,
+  "nodata_max_share": 0.01,
+  "cloud_like_max_share": 0.05,
+  "rgb_scale": 3000.0,
+  "method": "ml/b5_deleak.py raking; published questions kept verbatim except Autumn -> Fall"
+ },
+ "select": {
+  "reserved_tiles": {
+   "T29UPU": "Ireland",
+   "T29SND": "Portugal",
+   "T34TCR": "Serbia",
+   "T34WFS": "Finland",
+   "T32TMT": "Switzerland",
+   "T34UEG": "Lithuania"
+  },
+  "buffer_cells": 2,
+  "train_patches_official": 229114,
+  "train_patches_in_buffer": 1883,
+  "train_patches_eligible": 174017,
+  "train_patches_needed": 18086,
+  "validation_patches_needed": 1073,
+  "train_rake_report": {
+   "binary/adjacency": {
+    "in": 314376,
+    "effective_n": 243362,
+    "kept": 2563,
+    "worst_rate_error_after_raking": 0.0087
+   },
+   "binary/area": {
+    "in": 348034,
+    "effective_n": 156572,
+    "kept": 2454,
+    "worst_rate_error_after_raking": 0.0756
+   },
+   "binary/count": {
+    "in": 348034,
+    "effective_n": 182685,
+    "kept": 2495,
+    "worst_rate_error_after_raking": 0.0349
+   },
+   "binary/presence": {
+    "in": 348034,
+    "effective_n": 250270,
+    "kept": 2520,
+    "worst_rate_error_after_raking": 0.0018
+   },
+   "mcq/adjacency": {
+    "in": 140359,
+    "effective_n": 10568,
+    "kept": 1272,
+    "worst_rate_error_after_raking": 0.0
+   },
+   "mcq/area": {
+    "in": 174017,
+    "effective_n": 88849,
+    "kept": 1285,
+    "worst_rate_error_after_raking": 0.0
+   },
+   "mcq/climate zone": {
+    "in": 174017,
+    "effective_n": 8892,
+    "kept": 1208,
+    "worst_rate_error_after_raking": 0.0
+   },
+   "mcq/count": {
+    "in": 174017,
+    "effective_n": 4077,
+    "kept": 1198,
+    "worst_rate_error_after_raking": 0.0003
+   },
+   "mcq/country": {
+    "in": 174017,
+    "effective_n": 32322,
+    "kept": 1237,
+    "worst_rate_error_after_raking": 0.0
+   },
+   "mcq/presence": {
+    "in": 174017,
+    "effective_n": 2506,
+    "kept": 389,
+    "worst_rate_error_after_raking": 0.0
+   },
+   "mcq/relative pos": {
+    "in": 35003,
+    "effective_n": 2850,
+    "kept": 1258,
+    "worst_rate_error_after_raking": 0.0
+   },
+   "mcq/season": {
+    "in": 134586,
+    "effective_n": 99555,
+    "kept": 1185,
+    "worst_rate_error_after_raking": 0.0
+   }
+  },
+  "validation_rake_report": {
+   "binary/adjacency": {
+    "in": 14719,
+    "effective_n": 11170,
+    "kept": 147,
+    "worst_rate_error_after_raking": 0.0108
+   },
+   "binary/area": {
+    "in": 16000,
+    "effective_n": 6388,
+    "kept": 190,
+    "worst_rate_error_after_raking": 0.0431
+   },
+   "binary/count": {
+    "in": 16000,
+    "effective_n": 8269,
+    "kept": 149,
+    "worst_rate_error_after_raking": 0.0177
+   },
+   "binary/presence": {
+    "in": 16000,
+    "effective_n": 11479,
+    "kept": 156,
+    "worst_rate_error_after_raking": 0.0089
+   },
+   "mcq/adjacency": {
+    "in": 6719,
+    "effective_n": 410,
+    "kept": 87,
+    "worst_rate_error_after_raking": 0.0
+   },
+   "mcq/area": {
+    "in": 8000,
+    "effective_n": 3961,
+    "kept": 74,
+    "worst_rate_error_after_raking": 0.0
+   },
+   "mcq/climate zone": {
+    "in": 8000,
+    "effective_n": 314,
+    "kept": 51,
+    "worst_rate_error_after_raking": 0.0
+   },
+   "mcq/count": {
+    "in": 8000,
+    "effective_n": 191,
+    "kept": 62,
+    "worst_rate_error_after_raking": 0.0026
+   },
+   "mcq/country": {
+    "in": 8000,
+    "effective_n": 1388,
+    "kept": 70,
+    "worst_rate_error_after_raking": 0.0
+   },
+   "mcq/presence": {
+    "in": 8000,
+    "effective_n": 69,
+    "kept": 17,
+    "worst_rate_error_after_raking": 0.0001
+   },
+   "mcq/relative pos": {
+    "in": 1738,
+    "effective_n": 149,
+    "kept": 63,
+    "worst_rate_error_after_raking": 0.0
+   },
+   "mcq/season": {
+    "in": 6184,
+    "effective_n": 4604,
+    "kept": 93,
+    "worst_rate_error_after_raking": 0.0
+   }
+  }
+ },
+ "splits": {
+  "train": {
+   "patches_selected": 18086,
+   "patches_missing_bands": 0,
+   "patches_dropped_quality": 965,
+   "patches_kept": 17121,
+   "examples_written": 19489,
+   "examples_by_type": {
+    "mcq": 8588,
+    "captioning": 1431,
+    "binary": 9470
+   },
+   "examples_by_category": {
+    "mcq/season": 1121,
+    "captioning/None": 1431,
+    "binary/area": 2321,
+    "mcq/relative pos": 1189,
+    "mcq/count": 1115,
+    "mcq/country": 1199,
+    "mcq/adjacency": 1216,
+    "mcq/area": 1218,
+    "mcq/presence": 373,
+    "binary/presence": 2372,
+    "binary/count": 2348,
+    "binary/adjacency": 2429,
+    "mcq/climate zone": 1157
+   },
+   "text_only_gate": {
+    "passed": true,
+    "tolerance": 0.03,
+    "by_type": {
+     "binary": {
+      "acc": 0.4947201689545935,
+      "n": 9470
+     },
+     "mcq": {
+      "acc": 0.23893805309734514,
+      "n": 8588
+     }
+    },
+    "by_category": {
+     "binary/adjacency": {
+      "acc": 0.5117332235487855,
+      "n": 2429
+     },
+     "binary/area": {
+      "acc": 0.5053856096510125,
+      "n": 2321
+     },
+     "binary/count": {
+      "acc": 0.47103918228279384,
+      "n": 2348
+     },
+     "binary/presence": {
+      "acc": 0.4903035413153457,
+      "n": 2372
+     },
+     "mcq/adjacency": {
+      "acc": 0.25082236842105265,
+      "n": 1216
+     },
+     "mcq/area": {
+      "acc": 0.22249589490968802,
+      "n": 1218
+     },
+     "mcq/climate zone": {
+      "acc": 0.27657735522904064,
+      "n": 1157
+     },
+     "mcq/count": {
+      "acc": 0.2295964125560538,
+      "n": 1115
+     },
+     "mcq/country": {
+      "acc": 0.23686405337781485,
+      "n": 1199
+     },
+     "mcq/presence": {
+      "acc": 0.2546916890080429,
+      "n": 373
+     },
+     "mcq/relative pos": {
+      "acc": 0.22287636669470143,
+      "n": 1189
+     },
+     "mcq/season": {
+      "acc": 0.22836752899197146,
+      "n": 1121
+     }
+    }
+   }
+  },
+  "validation": {
+   "patches_selected": 1073,
+   "patches_missing_bands": 0,
+   "patches_dropped_quality": 56,
+   "patches_kept": 1017,
+   "examples_written": 1197,
+   "examples_by_type": {
+    "binary": 607,
+    "mcq": 493,
+    "captioning": 97
+   },
+   "examples_by_category": {
+    "binary/count": 142,
+    "binary/presence": 149,
+    "mcq/season": 86,
+    "mcq/count": 59,
+    "captioning/None": 97,
+    "mcq/presence": 17,
+    "binary/area": 174,
+    "mcq/climate zone": 50,
+    "mcq/adjacency": 84,
+    "mcq/relative pos": 61,
+    "binary/adjacency": 142,
+    "mcq/country": 67,
+    "mcq/area": 69
+   }
+  }
+ }
+}

@@ -1,0 +1,15 @@
+# Environment used by tools/ml_smoke_test.py (versions observed on 2026-09-20, not a tested range).
+# Kept apart from the backend's requirements.txt on purpose: the running service has no model yet.
+#
+#   python -m venv --system-site-packages .venv-ml     # reuses an existing CUDA build of torch
+#   .venv-ml/Scripts/python.exe -m pip install -r tools/requirements-ml.txt
+#
+# torch was NOT installed by this file: the machine already had torch 2.5.1+cu121 (CUDA 12.1).
+transformers==5.17.0
+accelerate==1.15.0
+bitsandbytes==0.50.2
+qwen-vl-utils==0.0.14
+safetensors==0.8.0
+peft==0.21.0
+# ml/b1_slice.py and `ml/b5_eval.py prepare` also need pyarrow, rasterio, zstandard, numpy and pandas; the
+# --system-site-packages venv picks those up from the base Python. `ml/b5_eval.py run` does not need them.

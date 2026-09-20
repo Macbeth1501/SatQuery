@@ -1,0 +1,19 @@
+# SatQuery AI backend runtime dependencies.
+# Install from the repo root: pip install -r requirements.txt
+fastapi>=0.116
+uvicorn[standard]>=0.35
+pydantic>=2.12
+python-multipart>=0.0.20
+pillow>=10.4
+# Pure-Python PDF rendering: no native GTK/Qt libraries needed on a demo machine.
+xhtml2pdf>=0.2.16
+
+# Test suite
+pytest>=8.0
+httpx>=0.27
+
+# Real GeoTIFF CRS, band, GSD, NoData and footprint extraction in metadata_service. Without
+# it the service can only fall back to filename hints, so it is a runtime dependency, not an
+# option. It brings numpy; numpy is listed too because the tests import it directly.
+rasterio>=1.3
+numpy>=1.26

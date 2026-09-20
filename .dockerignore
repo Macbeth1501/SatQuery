@@ -1,0 +1,13 @@
+# Build context for backend/Dockerfile is the repository root; keep it small and free of state.
+.git
+.github
+frontend
+docs
+tests
+graphify-out
+data
+backend/storage
+**/__pycache__
+**/*.pyc
+.env
+CLAUDE.md

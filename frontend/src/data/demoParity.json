@@ -1,0 +1,291 @@
+{
+  "scenario_a": {
+    "query": "Describe the land-cover and major objects visible in this image.",
+    "files": [
+      "Cartosat2S_Scene_Bhopal.tif"
+    ],
+    "taskType": "single_caption",
+    "tier": "High",
+    "rationale": "High confidence: Multispectral spectral signature clearly discriminates deep water, concrete terminal, and metallic storage tanks with zero cloud contamination.",
+    "rejected": false,
+    "answerText": "Land-cover analysis of the remote sensing scene classifies four dominant geographic zones: 1) Marine Port Basin (Water, 38.4% surface area), 2) Impervious Built-Up Terminal & Container Berth (41.2% area), 3) Industrial Hydrocarbon Depot containing 3 circular storage reservoirs, and 4) Intermodal Transportation Corridor. Major localized objects include 3 fuel storage tanks and 2 heavy gantry crane installations along the southern quay.",
+    "boxes": [
+      {
+        "id": "s1_tank_01",
+        "label": "Fuel Storage Tank (Floating Roof, Dia: 45m)",
+        "xLeft": 18.4,
+        "yTop": 24.1,
+        "xRight": 34.8,
+        "yBottom": 41.5,
+        "score": 0.96,
+        "isPrimary": true
+      },
+      {
+        "id": "s1_tank_02",
+        "label": "Fuel Storage Tank (Fixed Cone Roof, Dia: 40m)",
+        "xLeft": 42.1,
+        "yTop": 28.5,
+        "xRight": 58.2,
+        "yBottom": 45.9,
+        "score": 0.94,
+        "isPrimary": true
+      },
+      {
+        "id": "s1_tank_03",
+        "label": "Secondary Industrial Tank (Cooling / Reserve)",
+        "xLeft": 65.0,
+        "yTop": 52.0,
+        "xRight": 81.2,
+        "yBottom": 69.4,
+        "score": 0.88,
+        "isPrimary": true
+      }
+    ],
+    "regionTags": null,
+    "rejectionReason": null,
+    "rejectionDetails": null
+  },
+  "scenario_b": {
+    "query": "Highlight the water body referred to in the query.",
+    "files": [
+      "Sentinel2_Wetlands_Kerala.png"
+    ],
+    "taskType": "single_grounding",
+    "tier": "Medium",
+    "rationale": "Moderate confidence: Multiple spatial candidates identified for generic 'water body' query. Displaying multi-candidate boxes for transparent human review.",
+    "rejected": false,
+    "answerText": "Visual grounding localized 2 candidate water body regions within the scene to account for spatial ambiguity: Candidate 1 (Primary, Score: 0.95) represents the Deepwater Navigational Channel / Basin (x:8.0%, y:12.0% to x:52.0%, y:88.0%). Candidate 2 (Secondary, Score: 0.81) represents an Inland Stormwater Retention Reservoir (x:62.0%, y:15.0% to x:84.0%, y:38.0%). Both regions exhibit characteristic low NIR reflectance indicative of open standing water.",
+    "boxes": [
+      {
+        "id": "s2_water_primary",
+        "label": "Primary Navigational Channel / Harbor Basin (Deep Water)",
+        "xLeft": 8.0,
+        "yTop": 12.0,
+        "xRight": 52.0,
+        "yBottom": 88.0,
+        "score": 0.95,
+        "isPrimary": true
+      },
+      {
+        "id": "s2_water_secondary",
+        "label": "Secondary Inland Retention Pond (Candidate 2)",
+        "xLeft": 62.0,
+        "yTop": 15.0,
+        "xRight": 84.0,
+        "yBottom": 38.0,
+        "score": 0.81,
+        "isPrimary": false
+      }
+    ],
+    "regionTags": null,
+    "rejectionReason": null,
+    "rejectionDetails": null
+  },
+  "scenario_c": {
+    "query": "What changed between these two dates, and where did the change occur?",
+    "files": [
+      "Sentinel2_Bengaluru_2023.tif",
+      "Sentinel2_Bengaluru_2025.tif"
+    ],
+    "taskType": "change_vqa",
+    "tier": "High",
+    "rationale": "High confidence: Bitemporal co-registration RMSE < 0.3 pixels; radiometric normalization verified between baseline and current acquisitions.",
+    "rejected": false,
+    "answerText": "Bitemporal change analysis between baseline (T1) and current (T2) acquisitions identifies a major infrastructure expansion along the eastern waterfront. A net gain of +14,200 sq m (158,400 pixels at 0.3m GSD) of newly paved container staging area was constructed, alongside reinforced concrete foundation piers for a secondary gantry crane rail. No structural demolitions or shoreline erosion were observed.",
+    "boxes": [
+      {
+        "id": "s3_change_pier",
+        "label": "New Pier Foundation & Rail Extension (+6,400 sq m)",
+        "xLeft": 35.0,
+        "yTop": 22.0,
+        "xRight": 62.0,
+        "yBottom": 54.0,
+        "score": 0.95,
+        "isPrimary": true
+      },
+      {
+        "id": "s3_change_staging",
+        "label": "Newly Paved Logistics Staging Yard (+7,800 sq m)",
+        "xLeft": 68.0,
+        "yTop": 45.0,
+        "xRight": 88.5,
+        "yBottom": 72.0,
+        "score": 0.92,
+        "isPrimary": true
+      }
+    ],
+    "regionTags": null,
+    "rejectionReason": null,
+    "rejectionDetails": null
+  },
+  "scenario_d": {
+    "query": "Use the optical and SAR images together to identify built-up and water-covered regions.",
+    "files": [
+      "Sentinel2_RGBNIR_Assam.tif",
+      "Sentinel1_SAR_Assam_C_Band.tif"
+    ],
+    "taskType": "fusion",
+    "tier": "High",
+    "rationale": "High confidence: Multi-sensor synergy eliminates cloud obscuration false negatives while maintaining high geometric fidelity.",
+    "rejected": false,
+    "answerText": "Multimodal Optical-SAR synthesis leverages complementary physical sensor mechanisms to resolve built-up and water boundaries: [Agreement]: Central concrete quay and 2 large cargo berths confirmed concurrently by Optical multispectral reflectance and high SAR double-bounce radar returns. [SAR Penetration]: Eastern water fairway and 1 moored vessel occluded by 42% optical cumulus clouds are unequivocally resolved by SAR C-band microwave backscatter. [Optical Detail]: Color-coded TEU shipping container blocks and painted road lanes resolved exclusively via high-resolution optical bands.",
+    "boxes": [
+      {
+        "id": "s4_vessel_berth4",
+        "label": "Cargo Vessel (Berth 4) — Confirmed Optical & SAR",
+        "xLeft": 22.5,
+        "yTop": 14.2,
+        "xRight": 44.1,
+        "yBottom": 32.8,
+        "score": 0.97,
+        "isPrimary": true
+      },
+      {
+        "id": "s4_vessel_berth7",
+        "label": "Bulk Carrier (Berth 7) — Confirmed Optical & SAR",
+        "xLeft": 51.0,
+        "yTop": 38.4,
+        "xRight": 73.6,
+        "yBottom": 57.2,
+        "score": 0.94,
+        "isPrimary": true
+      },
+      {
+        "id": "s4_vessel_cloud_penetrated",
+        "label": "Moored Vessel — Detected under Cloud via SAR C-Band",
+        "xLeft": 12.2,
+        "yTop": 64.8,
+        "xRight": 26.4,
+        "yBottom": 78.5,
+        "score": 0.91,
+        "isPrimary": true
+      }
+    ],
+    "regionTags": [
+      {
+        "region": "Central Commercial Quay & Berths",
+        "tag": "agreement",
+        "score": 0.96,
+        "description": "Optical spectral reflectance and SAR double-bounce radar returns mutually verify high-density built-up terminal structures."
+      },
+      {
+        "region": "Cloud-Occluded Eastern Fairway",
+        "tag": "sar_only",
+        "score": 0.92,
+        "description": "C-band microwave radar backscatter penetrates 42% cloud deck, confirming water fairway and resolving 1 maritime target."
+      },
+      {
+        "region": "Inland Container Staging Yard",
+        "tag": "optical_only",
+        "score": 0.89,
+        "description": "Multispectral color variations distinguish individual container stacks and lane markings undetectable in single-polarization radar."
+      }
+    ],
+    "rejectionReason": null,
+    "rejectionDetails": null
+  },
+  "scenario_e": {
+    "query": "Use the optical and SAR images together to identify built-up areas, then determine whether the built-up area increased.",
+    "files": [
+      "Cartosat2S_Hyderabad.tif",
+      "RISAT1_Hyderabad_DualPol.tif"
+    ],
+    "taskType": "fusion_then_change",
+    "tier": "High",
+    "rationale": "High confidence: Two-stage verification confirms physical built-up expansion with cross-sensor agreement on baseline footprint.",
+    "rejected": false,
+    "answerText": "Fused Optical-SAR analysis confirms 2 primary features across the region of interest. [Agreement]: 1 feature(s) verified concurrently across both high-resolution Optical RGB and SAR radar backscatter peaks. [SAR Penetration]: 0 feature(s) detected exclusively via SAR C-band microwave penetration beneath optical cloud deck. [Optical Context]: 1 area(s) resolved in multispectral optical bands. Cross-modal synthesis confirms all targets with zero false-alarm artifacts. In addition, temporal analysis demonstrates verified infrastructure growth of +14,200 sq m across the monitored perimeter.",
+    "boxes": [
+      {
+        "id": "s5_fused_quay",
+        "label": "Baseline Fused Built-Up Harbor Quay",
+        "xLeft": 20.0,
+        "yTop": 15.0,
+        "xRight": 58.0,
+        "yBottom": 48.0,
+        "score": 0.96,
+        "isPrimary": true
+      },
+      {
+        "id": "s5_expanded_staging",
+        "label": "Verified Built-Up Expansion (+14,200 sq m Paved Yard)",
+        "xLeft": 68.0,
+        "yTop": 45.0,
+        "xRight": 88.5,
+        "yBottom": 72.0,
+        "score": 0.93,
+        "isPrimary": true
+      }
+    ],
+    "regionTags": [
+      {
+        "region": "Baseline Commercial Terminal",
+        "tag": "agreement",
+        "score": 0.95,
+        "description": "Verified across Optical and SAR baseline acquisitions."
+      },
+      {
+        "region": "Eastern Embankment Extension",
+        "tag": "optical_only",
+        "score": 0.91,
+        "description": "Fresh asphalt and concrete foundation radiometric signature resolved via multispectral bands."
+      }
+    ],
+    "rejectionReason": null,
+    "rejectionDetails": null
+  },
+  "scenario_f": {
+    "query": "What changed between these two dates and did built-up area increase?",
+    "files": [
+      "Optical_Sensor_Scene.png",
+      "SAR_Radar_Scene.png"
+    ],
+    "taskType": "change_vqa",
+    "tier": "Low",
+    "rationale": "Physical precondition check failed: Cross-sensor modality conflict: Bitemporal change detection requires matching sensor physics (Optical-Optical or SAR-SAR). An Optical-SAR pair cannot be validated for physical change.",
+    "rejected": true,
+    "answerText": null,
+    "boxes": [],
+    "regionTags": null,
+    "rejectionReason": "Cross-sensor modality conflict: Bitemporal change detection requires matching sensor physics (Optical-Optical or SAR-SAR). An Optical-SAR pair cannot be validated for physical change.",
+    "rejectionDetails": {
+      "reasonCode": "modality_mismatch",
+      "humanReadableReason": "Cross-sensor modality conflict: Bitemporal change detection requires matching sensor physics (Optical-Optical or SAR-SAR). An Optical-SAR pair cannot be validated for physical change.",
+      "suggestedAction": "For Optical-SAR pairs, run a multimodal 'Fusion' query instead (e.g. 'Detect ships under clouds'). For change detection, provide two Optical or two SAR images.",
+      "detectedContext": {
+        "image_1_modality": "optical",
+        "image_2_modality": "sar"
+      },
+      "requiredContext": {
+        "allowed_pairs": "optical+optical, sar+sar"
+      }
+    }
+  },
+  "scenario_g": {
+    "query": "What changed between these two dates, and where did the change occur?",
+    "files": [
+      "Sentinel2_Bengaluru_2025.tif",
+      "Sentinel2_Bengaluru_2023.tif"
+    ],
+    "taskType": "change_vqa",
+    "tier": "Low",
+    "rationale": "Physical precondition check failed: Temporal ordering violation: Slot 1 acquisition timestamp (2025-01-20T05:12:00) is after Slot 2 acquisition timestamp (2023-03-15T05:10:00).",
+    "rejected": true,
+    "answerText": null,
+    "boxes": [],
+    "regionTags": null,
+    "rejectionReason": "Temporal ordering violation: Slot 1 acquisition timestamp (2025-01-20T05:12:00) is after Slot 2 acquisition timestamp (2023-03-15T05:10:00).",
+    "rejectionDetails": {
+      "reasonCode": "temporal_ordering_invalid",
+      "humanReadableReason": "Temporal ordering violation: Slot 1 acquisition timestamp (2025-01-20T05:12:00) is after Slot 2 acquisition timestamp (2023-03-15T05:10:00).",
+      "suggestedAction": "Swap the order of the uploaded images so that earlier image is in Slot 1.",
+      "detectedContext": {
+        "slot_1_time": "2025-01-20T05:12:00",
+        "slot_2_time": "2023-03-15T05:10:00"
+      },
+      "requiredContext": {
+        "chronological": "slot_1_time <= slot_2_time"
+      }
+    }
+  }
+}

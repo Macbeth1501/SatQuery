@@ -1,0 +1,12 @@
+# Paths excluded from the graphify knowledge graph.
+# Build artifacts, vendored dependencies, runtime output and raw datasets —
+# none of them carry architecture meaning, and all of them are large.
+.git/
+node_modules/
+frontend/node_modules/
+frontend/dist/
+graphify-out/
+backend/storage/
+data/
+package-lock.json
+frontend/package-lock.json

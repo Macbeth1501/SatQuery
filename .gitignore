@@ -1,0 +1,26 @@
+# Ignore everything at the repo root except the whitelisted paths below
+/*
+!/.gitignore
+!/docs/
+!/backend/
+!/frontend/
+
+!/tests/
+!/tools/
+!/ml/
+!/CLAUDE.md
+!/.graphifyignore
+!/pytest.ini
+!/requirements.txt
+!/.env.example
+!/docker-compose.yml
+!/.dockerignore
+!/.github/
+
+# Generated / runtime artifacts
+__pycache__/
+*.pyc
+node_modules/
+dist/
+/backend/storage/
+/graphify-out/
