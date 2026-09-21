@@ -121,9 +121,17 @@ purpose, because no model answer is rated High. What to show on the Results page
 - the metadata read from the uploaded GeoTIFF (e.g. EPSG:32629, 10 m, 2017-11-12 for the first image);
 - no bounding boxes, because the adapter does not ground.
 
-A typed question in another format (e.g. "Describe the land cover") gets a free-form reply that is marked
-as outside the trained format and rated Low. Only single-image questions go to the model. The A-G scenarios
-still run on the demo engine.
+**What to ask, and what not to (from the owner's live session, 2026-09-22):**
+- **Good new questions:** yes/no or a-d questions about land cover, e.g. "Is there forest in this image?", "Is most of
+  the image farmland?", "Is this image from Ireland?". Expect probabilities mostly between 50 and 70%.
+- **Avoid "Describe the image"** and similar. The adapter did learn BigEarthNet's caption template, but it fills in
+  country, season and climate from memory. It said "Finland, spring" for the Irish November patch and described a
+  "large, complex building" on Serbian farmland. The note under such answers wrongly says the model was never trained on
+  descriptions; that note is a known bug.
+- **Avoid commands starting with "Do"** ("Do descriptive analysis"). A bug reads them as yes/no and answers "No".
+- **Do not run change or fusion on the real patches.** Only single-image questions go to the model. Change, fusion and
+  grounding still come from the demo engine, which returns scripted text rated High even for real images. The A-G
+  scenarios are fine to show as scripted demos.
 
 **If the model server is down**, the backend returns 503 and the page shows a red "No answer" box. On this path
 there is no fallback to demo data. Without `SATQUERY_VQA_MODEL_URL` the backend answers the sample from the demo

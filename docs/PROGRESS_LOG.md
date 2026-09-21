@@ -68,9 +68,20 @@ fusion query, returning HTTP 200 with a full trace rather than an error.
 
 ## Next step
 
-**Newest (2026-09-21): five live-model samples; upload metadata read from the file** (newest History entry). Demo-ready:
-follow `docs/STARTUP_GUIDE.md` §3a. Suggested next steps, none started: the security items in `docs/AUDIT_REPORT.md`
-(1.1-1.3) before any non-local use; a full-epoch retrain; the rest of C0/C2.
+**Newest (2026-09-22): the owner's live session found four problems; recommended order set, nothing started.**
+The session used new questions in the demo (newest History entry). The full handover, with file and line references, is
+`docs/HANDOFF_PROMPT.md`. Recommended order, awaiting the owner's choice:
+1. **Three fixes, about 1-2 h, no training.**
+   - (a) The yes/no detector in `ml/serve_vqa.py` treats any "Do ..." sentence as yes/no; also correct the wrong "trained
+     only on yes/no" note (`vqa_caption.py`, `confidence_scorer.py`).
+   - (b) Change, fusion and grounding on real images must say no trained model exists, instead of a scripted High answer.
+   - (c) Compare the base Qwen2-VL (adapter disabled) with the adapter for free-form descriptions on the 5 samples.
+2. **Security items** 1.1-1.3 from `docs/AUDIT_REPORT.md`.
+3. **Full-epoch retrain** (about 7 h). Consider dropping country, season and climate from the caption targets first.
+4. **Then** B6 grounding, B7 change, B3/C1 interpreter, and fusion.
+
+**Earlier (2026-09-21): five live-model samples; upload metadata read from the file.** Demo-ready: follow
+`docs/STARTUP_GUIDE.md` §3a.
 
 **Earlier (2026-09-21): live-model website demo built and verified over HTTP.**
 Run it with `docs/STARTUP_GUIDE.md` §3a. **Verified in a real browser** (headless Chromium, all 5 questions and the
@@ -163,6 +174,15 @@ The backend suite uses FastAPI's `TestClient`, so no server needs to be running.
 ## Open items
 
 Real, known, not yet fixed (as opposed to "Known limitations", which are accepted):
+
+0. **Found in the owner's live session 2026-09-22** (details in History and `docs/HANDOFF_PROMPT.md` §4):
+   - (a) "Do Descriptive analysis" answered "No, 92%", because `serve_vqa.py` `BINARY_OPENERS` reads any "Do ..." sentence as
+     yes/no.
+   - (b) Free-form descriptions invent facts: "Finland, spring" for the Irish November patch, and "a large, complex
+     building" for Serbian farmland.
+   - (c) The free-form note wrongly says the adapter was trained only on yes/no and a-d questions; 1,431 of 19,489
+     training examples are captions. The note is in `vqa_caption.py:85-89` and `confidence_scorer.py:83`.
+   - (d) Change analysis on two real patches returned the scripted demo report rated High.
 
 1. **The scorer (demo path) and both fusion modules still call `ScenarioEngine` directly.** The live-model path
    (single-image, `SATQUERY_VQA_MODEL_URL` set) no longer does, since 2026-09-21. The remainder of the original item:
@@ -267,6 +287,38 @@ Accepted for the prototype, not defects to fix now:
 ---
 
 ## History
+
+### 2026-09-22 — Owner's live session reviewed; wrong training claim corrected; handover written (no code changed)
+
+The owner asked new questions in the live demo and asked whether they can. They can: every single-image question went to
+the real model. The backend's session records (`backend/storage/satquery.db`, read-only) show:
+
+| Query | Image | Answer | Assessment |
+|---|---|---|---|
+| Is this image from ireland | T29UPU_38_37 (Ireland) | Yes, 61% | correct |
+| Is this a dessert | T34UEG_28_34 | No, 61% | plausible |
+| Is there a river passing through | T29UPU_55_58 | No, 60% | plausible |
+| Describe the image / Give the descriptive study of scenery | T29UPU_55_58 (Ireland, Nov) | "...spring season in Finland..." | wrong country and season |
+| Describe the scenery | T34TCR_36_25 (Serbia, farmland) | "a large, complex building..." | invented |
+| Do Descriptive analysis | T29SND_42_38 | No, 92% | bug: "Do" read as a yes/no opener |
+| Do change anaylisis | two real patches | scripted change report, High | demo engine answered real images |
+
+**Correction.** The free-form note and earlier replies to the owner said the adapter was trained only on yes/no and a-d
+questions. `data/b1_v2/train.jsonl` holds 9,470 binary, 8,588 mcq and **1,431 captioning** examples. The captions follow
+BigEarthNet's template (country, season, climate zone, dominant class with area), which a 120 px patch cannot support,
+so the adapter fills the template from memory. Run 1's captions named the right country 61.7% of the time on seen
+tiles only; run 2's were never scored. The code text is not yet corrected (next step 1a).
+
+**Answer given to the owner on "train further first?":** no. More of the same training teaches the caption template more
+fluently, not more truthfully, and it holds the GPU so the demo cannot run. Fix first, then retrain for a full epoch
+(which should help yes/no and a-d), preferably after removing image-unsupported facts from the caption targets.
+
+Also: `docs/HANDOFF_PROMPT.md` was rewritten as the complete handover (state, bugs with file/line, ordered next steps,
+facts, rules). `CLAUDE.md`, `docs/STARTUP_GUIDE.md` (presenter warnings), the Development Plan (B5 note) and
+`docs/AUDIT_REPORT.md` (pointer to the new findings) were updated. `.gitignore` now ignores `*.aux.xml`: three GDAL
+statistics sidecars appeared in `frontend/public/real/` at 01:05 on 2026-09-22, written when a GIS tool opened the files.
+The Claude memory note on the GPU was corrected: it had said local fine-tuning cannot fit, which the two local runs
+disproved.
 
 ### 2026-09-21 — Upload metadata read from the file, four more real images, interpreter narrowed, all docs refreshed
 

@@ -24,3 +24,6 @@ node_modules/
 dist/
 /backend/storage/
 /graphify-out/
+
+# GDAL statistics sidecars, written when a GIS tool opens a raster
+*.aux.xml
