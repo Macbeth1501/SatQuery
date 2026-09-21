@@ -284,6 +284,20 @@ def test_server_tells_the_three_question_kinds_apart():
     assert S.question_kind("Island coastlines: describe them.") == "free"
 
 
+def test_server_does_not_read_requests_as_yes_no_questions():
+    # found in the owner's live session: "Do ..." imperatives were answered "No, 92%"
+    assert S.question_kind("Do Descriptive analysis") == "free"
+    assert S.question_kind("Do change anaylisis") == "free"
+    assert S.question_kind("Can you describe the image?") == "free"
+    assert S.question_kind("Could you please give a summary of the scene?") == "free"
+    # the trained binary forms stay binary, including "Can you detect" and "Would you classify"
+    assert S.question_kind("Do broad-leaved forests take up between 0% and 20% of the image?") == "binary"
+    assert S.question_kind("Can you detect any marine waters in the image?") == "binary"
+    assert S.question_kind("Would you classify arable lands as covering between 10% and 60% of the image?") == "binary"
+    # a question typed without "?" still counts when its opener cannot be an imperative
+    assert S.question_kind("Is there a river passing through") == "binary"
+
+
 def test_server_offers_only_the_options_the_question_lists():
     assert S.candidates("Is it wet?", "binary") == ["yes", "no"]
     assert S.candidates("Pick: a) x, b) y, c) z", "mcq") == ["a", "b", "c"]

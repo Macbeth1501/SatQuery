@@ -101,5 +101,13 @@ async def get_registry():
                 "name": "Query Intent Resolver",
                 "description": "Screens ambiguous or unresolvable natural language prompts.",
             },
+            {
+                "code": "no_trained_model",
+                "name": "Trained Model Gate",
+                "description": (
+                    "With the live model on, refuses grounding, change and fusion on non-demo images, "
+                    "since only single-image yes/no and a-d questions have a trained model."
+                ),
+            },
         ],
     }

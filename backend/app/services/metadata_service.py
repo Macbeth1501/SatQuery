@@ -49,6 +49,22 @@ TIMESTAMP_TAGS = (
 )
 PLATFORM_TAGS = ("PLATFORM", "SENSOR", "SATELLITE", "MISSION", "SPACECRAFT_ID", "TIFFTAG_IMAGEDESCRIPTION")
 
+# The demo scenarios' input file names (frontend/src/data/mockScenarios.ts). The GeoTIFFs also carry a DEMO_NOTE
+# tag, but scenarios B and F are PNGs rasterised in the browser, and a failed fetch sends a placeholder blob under
+# the same name, so the name is what identifies every demo input.
+DEMO_INPUT_NAMES = frozenset({
+    "Cartosat2S_Scene_Bhopal.tif",
+    "Sentinel2_Wetlands_Kerala.png",
+    "Sentinel2_Bengaluru_2023.tif",
+    "Sentinel2_Bengaluru_2025.tif",
+    "Sentinel2_RGBNIR_Assam.tif",
+    "Sentinel1_SAR_Assam_C_Band.tif",
+    "Cartosat2S_Hyderabad.tif",
+    "RISAT1_Hyderabad_DualPol.tif",
+    "Optical_Sensor_Scene.png",
+    "SAR_Radar_Scene.png",
+})
+
 Footprint = Tuple[float, float, float, float]  # west, south, east, north in EPSG:4326
 
 
@@ -194,6 +210,7 @@ class MetadataService:
             name=filename,
             format=_format_from_extension(filename),
             detected_modality=_modality_from_filename(filename),
+            demo_input=Path(filename).name in DEMO_INPUT_NAMES,
         )
         try:
             self._read_raster(metadata, file_path)
@@ -284,6 +301,8 @@ class MetadataService:
                     }
 
                 tags = src.tags()
+                if "DEMO_NOTE" in tags:
+                    metadata.demo_input = True
                 acquired = _first_tag(tags, TIMESTAMP_TAGS)
                 if acquired:
                     metadata.acquisition_timestamp = _normalize_timestamp(acquired)

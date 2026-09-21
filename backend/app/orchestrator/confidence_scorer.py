@@ -80,8 +80,9 @@ class ConfidenceScorer:
             return Confidence(
                 tier="Low",
                 rationale=(
-                    "Low confidence: free-form reply outside the adapter's trained format "
-                    f"(yes/no and a-d multiple choice). {held_out}"
+                    "Low confidence: free-form reply with no answer probability. Free-form descriptions have "
+                    "not been evaluated on unseen tiles and can state facts the image cannot show, such as "
+                    f"the country or season. {held_out}"
                 ),
                 details=details,
             )

@@ -26,7 +26,8 @@ export type RejectionReasonCode =
   | 'crs_mismatch_unresolvable'
   | 'insufficient_footprint_overlap'
   | 'temporal_ordering_invalid'
-  | 'ambiguous_intent';
+  | 'ambiguous_intent'
+  | 'no_trained_model';
 
 export interface BoundingBox {
   id?: string;

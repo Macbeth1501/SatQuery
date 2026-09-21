@@ -115,13 +115,24 @@ def test_tier_comes_from_the_model_probability_and_is_never_high(client, model_o
     assert f"{probability * 100:.0f}%" in body["confidence"]["rationale"]
 
 
-def test_free_form_reply_is_low_and_says_it_is_outside_the_trained_format(client, model_on):
+def test_free_form_reply_is_low_and_says_it_is_unevaluated(client, model_on):
     model_on.reply["value"] = fake_reply(kind="free", answer="Farmland with hedgerows.",
                                          answer_text="Farmland with hedgerows.")
     body = ask(client, "Describe the land-cover in this image.")
     assert body["taskSpec"]["taskType"] == "single_caption"
     assert body["confidence"]["tier"] == "Low"
-    assert "outside its trained format" in body["answerText"]
+    assert "have not been evaluated" in body["answerText"]
+    # the adapter did see captions (1,431 of 19,489 training examples); the old note denied it
+    assert "trained only" not in body["answerText"]
+    assert "BigEarthNet captions" in body["answerText"]
+
+
+def test_free_form_reply_from_the_base_model_says_so(client, model_on):
+    reply = fake_reply(kind="free", answer="Fields and a road.", answer_text="Fields and a road.")
+    model_on.reply["value"] = {**reply, "answered_by": "base"}
+    body = ask(client, "Describe the land-cover in this image.")
+    assert "adapter switched off" in body["answerText"]
+    assert body["confidence"]["tier"] == "Low"
 
 
 def test_multiple_choice_answer_text_is_passed_through(client, model_on):
@@ -131,8 +142,19 @@ def test_multiple_choice_answer_text_is_passed_through(client, model_on):
     assert body["confidence"]["tier"] == "Low"
 
 
-def test_other_tasks_stay_on_the_demo_engine(client, monkeypatch):
-    """Only single-image questions go to the model; a change query never calls it."""
+DEMO_DIR = ROOT / "frontend" / "public" / "demo"
+DEMO_PAIR = ("Sentinel2_Bengaluru_2023.tif", "Sentinel2_Bengaluru_2025.tif")
+
+
+def post_pair(client, question, names_and_bytes):
+    files = [("files", (name, data, "image/tiff")) for name, data in names_and_bytes]
+    response = client.post("/v1/analyze", data={"query": question}, files=files)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_other_tasks_on_demo_inputs_stay_on_the_demo_engine(client, monkeypatch):
+    """Only single-image questions go to the model; the demo pair still gets its scripted change report."""
     calls = []
 
     async def fake_ask(image_path, question):
@@ -141,13 +163,59 @@ def test_other_tasks_stay_on_the_demo_engine(client, monkeypatch):
 
     monkeypatch.setattr(config, "VQA_MODEL_URL", "http://model.invalid")
     monkeypatch.setattr(model_client, "ask_vqa", fake_ask)
-    response = client.post(
-        "/v1/analyze",
-        data={"query": "What changed between these two dates?"},
-        files=[("files", ("s2_2023.png", b"x", "image/png")), ("files", ("s2_2025.png", b"x", "image/png"))],
-    )
-    assert response.status_code == 200
+    body = post_pair(client, "What changed between these two dates?",
+                     [(n, (DEMO_DIR / n).read_bytes()) for n in DEMO_PAIR])
     assert calls == []
+    assert body["rejected"] is False
+    assert body["taskSpec"]["taskType"] == "change_vqa"
+
+
+def test_change_on_real_images_says_no_trained_model_exists(client, model_on):
+    """The owner's live session: "Do change anaylisis" on two real patches got the scripted report, rated High."""
+    pair = [(SAMPLE["rasterFile"], RASTER)] * 2  # one real patch twice, so the footprints overlap
+    body = post_pair(client, "What changed between these two dates?", pair)
+    assert body["rejected"] is True
+    assert body["rejectionDetails"]["reasonCode"] == "no_trained_model"
+    assert "change_vqa" in body["rejectionDetails"]["humanReadableReason"]
+    assert body["confidence"]["tier"] == "Low"
+    assert model_on == []  # nor was the model asked; model_on also forbids the scenario engine
+
+
+def test_grounding_on_a_real_image_says_no_trained_model_exists(client, model_on):
+    body = ask(client, "Highlight the water bodies in this image.")
+    assert body["taskSpec"]["taskType"] == "single_grounding"
+    assert body["rejectionDetails"]["reasonCode"] == "no_trained_model"
+    assert body["evidence"]["boxes"] == []
+
+
+def test_a_real_image_beside_a_demo_image_is_still_refused(client, model_on):
+    # the same real bytes in both slots, so the footprints overlap; slot 1 carries a demo file name
+    pair = [(DEMO_PAIR[0], RASTER), (SAMPLE["rasterFile"], RASTER)]
+    body = post_pair(client, "What changed between these two dates?", pair)
+    assert body["rejectionDetails"]["reasonCode"] == "no_trained_model"
+
+
+def test_without_the_live_model_real_images_keep_the_old_behaviour(client, monkeypatch):
+    monkeypatch.setattr(config, "VQA_MODEL_URL", None)
+    pair = [(SAMPLE["rasterFile"], RASTER)] * 2  # one real patch twice, so the footprints overlap
+    body = post_pair(client, "What changed between these two dates?", pair)
+    assert body["rejected"] is False
+
+
+def test_demo_input_names_match_the_frontend_scenarios():
+    """A renamed demo file would otherwise be refused as a user's image in live mode."""
+    import re
+
+    from backend.app.services.metadata_service import DEMO_INPUT_NAMES
+
+    source = (ROOT / "frontend" / "src" / "data" / "mockScenarios.ts").read_text(encoding="utf-8")
+    names = set(re.findall(r"name: '([^']+\.(?:tif|png))'", source))
+    assert names == set(DEMO_INPUT_NAMES)
+
+
+def test_demo_flag_never_reaches_the_wire():
+    image = ImageMetadata(image_id="img_1", demo_input=True)
+    assert "demoInput" not in image.model_dump(by_alias=True)
 
 
 def test_unreachable_model_is_a_503_not_a_demo_answer(client, monkeypatch):

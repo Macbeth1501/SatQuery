@@ -1,4 +1,5 @@
 from typing import Any, Dict, Optional
+from pydantic import Field
 from backend.app.schemas.base import CamelModel
 
 
@@ -17,3 +18,5 @@ class ImageMetadata(CamelModel):
     preview_url: Optional[str] = None
     dimensions: Optional[Dict[str, int]] = None
     footprint_overlap_percent: Optional[float] = None
+    # One of the built-in demo inputs (scenarios A-G), not a user's image. Internal only: never sent on the wire.
+    demo_input: bool = Field(default=False, exclude=True)

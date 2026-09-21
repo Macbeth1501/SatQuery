@@ -67,7 +67,10 @@ class VqaCaptionSpecialist(BaseSpecialist):
         result = await model_client.ask_vqa(image_path, task_spec.question_text or "")
 
         item = EvidenceItem(
-            source_specialist=f"{self.name} (trained adapter)",
+            source_specialist=(
+                f"{self.name} (base model, adapter off)" if result.get("answered_by") == "base"
+                else f"{self.name} (trained adapter)"
+            ),
             adapter_id=result["adapter_id"],
             answer_text=self._compose_answer(result),
             boxes=[],
@@ -83,9 +86,18 @@ class VqaCaptionSpecialist(BaseSpecialist):
     @staticmethod
     def _compose_answer(result: Dict[str, Any]) -> str:
         if not result.get("trained_format", True):
+            if result.get("answered_by") == "base":
+                return (
+                    f"{result['answer_text']} (Free-form reply from the base Qwen2-VL-2B model with the LoRA "
+                    "adapter switched off, because the adapter's own descriptions name a country and season the "
+                    "image cannot show. The base model was not trained on satellite imagery and has not been "
+                    "evaluated on it: it can still describe details that are not there, such as buildings.)"
+                )
             return (
-                f"{result['answer_text']} (Free-form reply: the adapter was trained only on yes/no and "
-                "a-d multiple-choice land-cover questions, so this answer is outside its trained format.)"
+                f"{result['answer_text']} (Free-form reply: the adapter was trained mostly on yes/no and a-d "
+                "land-cover questions, with a small share (about 7%) of BigEarthNet captions. Its descriptions "
+                "have not been evaluated on unseen tiles and can state facts the image cannot show, such as "
+                "the country or season.)"
             )
         probability = result.get("probability")
         share = f" (model probability {probability * 100:.0f}%)" if probability is not None else ""

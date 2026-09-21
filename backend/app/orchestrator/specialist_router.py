@@ -211,7 +211,8 @@ class SpecialistRouter:
                     component="VqaCaptionSpecialist",
                     adapter_id=v_item.adapter_id,
                     output_summary=(
-                        f"Trained adapter answered '{model_result['answer_text']}'"
+                        ("Base model (adapter off)" if model_result.get("answered_by") == "base" else "Trained adapter")
+                        + f" answered '{model_result['answer_text']}'"
                         + (f" with probability {probability:.2f}" if probability is not None else " (free-form)")
                         + f" in {model_result['latency_ms']:.0f} ms"
                     ),
@@ -220,6 +221,7 @@ class SpecialistRouter:
                         "revision": model_result.get("revision"),
                         "adapter": model_result.get("adapter"),
                         "question_kind": model_result["kind"],
+                        "answered_by": model_result.get("answered_by", "adapter"),
                         "answer_distribution": model_result.get("distribution"),
                         "raw_output": model_result["raw_output"],
                         "model_latency_ms": model_result["latency_ms"],

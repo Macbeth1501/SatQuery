@@ -15,6 +15,14 @@ export const RejectionState: React.FC<RejectionStateProps> = ({ rejection }) => 
   // optical+SAR pair that was submitted for change detection.
   const isAmbiguous = rejection.reasonCode === 'ambiguous_intent';
   const offersFusion = rejection.reasonCode === 'modality_mismatch';
+  // No model exists for the task yet: neither the inputs nor the wording are at fault.
+  const noModel = rejection.reasonCode === 'no_trained_model';
+  const title = isAmbiguous
+    ? 'Query Needs Clarification'
+    : noModel
+      ? 'No Trained Model for This Task Yet'
+      : 'Physical Input Precondition Rejection';
+  const retryLabel = isAmbiguous ? 'Rephrase Query' : noModel ? 'Ask a Different Question' : 'Modify Uploaded Images';
 
   return (
     <div style={{
@@ -43,7 +51,7 @@ export const RejectionState: React.FC<RejectionStateProps> = ({ rejection }) => 
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <h3 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-              {isAmbiguous ? 'Query Needs Clarification' : 'Physical Input Precondition Rejection'}
+              {title}
             </h3>
             <span className="badge badge-rose" style={{ fontSize: 10, fontFamily: 'var(--font-mono)' }}>
               CODE: {rejection.reasonCode.toUpperCase()}
@@ -167,7 +175,7 @@ export const RejectionState: React.FC<RejectionStateProps> = ({ rejection }) => 
           style={{ fontSize: 13 }}
         >
           <RefreshCcw size={14} />
-          <span>{isAmbiguous ? 'Rephrase Query' : 'Modify Uploaded Images'}</span>
+          <span>{retryLabel}</span>
         </button>
       </div>
     </div>

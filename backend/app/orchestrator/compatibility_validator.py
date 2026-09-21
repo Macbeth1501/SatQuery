@@ -11,6 +11,17 @@ from backend.app.schemas.validation import (
     ValidationPass,
     ValidationRejection,
 )
+from backend.app.services import model_client
+
+# Tasks with no trained model behind them; only the scripted demo engine answers these.
+NO_MODEL_TASKS = frozenset({
+    TaskType.SINGLE_GROUNDING,
+    TaskType.CHANGE_VQA,
+    TaskType.CHANGE_DESCRIPTION,
+    TaskType.CHANGE_AND_GROUNDING,
+    TaskType.FUSION,
+    TaskType.FUSION_THEN_CHANGE,
+})
 
 
 class CompatibilityValidator:
@@ -138,6 +149,31 @@ class CompatibilityValidator:
                         detected_context={"image_1_crs": crs_1, "image_2_crs": crs_2},
                         required_context={"compatible_crs": "Uniform or transformable CRS"},
                     )
+
+        # 8. Trained-model gate. With the live model on, only single-image questions have a trained model;
+        # grounding, change and fusion would come from the scripted demo engine, so on a user's own images
+        # they are refused rather than answered with canned text. The demo inputs keep their scripted answers.
+        if (
+            model_client.is_enabled()
+            and task_spec.task_type in NO_MODEL_TASKS
+            and not all(img.demo_input for img in images)
+        ):
+            task = task_spec.task_type.value
+            return ValidationRejection(
+                reason_code=RejectionReasonCode.NO_TRAINED_MODEL,
+                human_readable_reason=(
+                    f"No trained model exists yet for '{task}'. Only single-image yes/no and a-d multiple-choice "
+                    "land-cover questions are answered by a real model; the grounding, change and fusion "
+                    "answers are scripted demo output, so they are not given for your own images."
+                ),
+                missing_requirement=f"A trained specialist for '{task}' (not built yet).",
+                suggested_action=(
+                    "Ask a yes/no or a-d land-cover question about Image 1, for example "
+                    "'Is there any water in the image?', or load a demo scenario to see the scripted workflow."
+                ),
+                detected_context={"task": task, "inputs": ", ".join(img.name for img in images)},
+                required_context={"answered_by_a_real_model": "single_vqa, single_caption"},
+            )
 
         # Passed all preconditions
         warnings = []

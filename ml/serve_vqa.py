@@ -16,8 +16,11 @@ How an answer is produced, matching training and `b5_eval.py` so the demo behave
   * binary (yes/no) and multiple-choice (a-d) questions: one forward pass, and the next-token distribution is
     restricted to the candidate answers; the winner and its share of that restricted probability are returned.
     The greedy reply (8 tokens) is returned too, as `raw_output`, for the trace;
-  * anything else is "free": the adapter was never trained on it, so it gets a greedy reply of up to 64
-    tokens and no probability, and the caller must not present it as a trained answer.
+  * anything else is "free": a greedy reply of up to 128 tokens and no probability. The adapter did see
+    BigEarthNet captions (1,431 of 19,489 training examples), whose template names a country, season and
+    climate zone that a 120 px patch cannot show, and it fills those from memory. So --free-form base (the
+    default) answers free-form questions with the adapter switched off; --free-form adapter restores the old
+    behaviour. Either way the reply is unevaluated and the caller must not present it as a trained answer.
 
 The probability is the model's own number, not a calibrated accuracy. On unseen tiles run 2 scores about 33% on
 multiple choice (chance 25%) and 50% on yes/no, whatever the probability says.
@@ -34,20 +37,36 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from b5_text_only import parse_options  # noqa: E402  (pure Python, no torch)
 
-# A question is yes/no when it opens with an auxiliary verb; BigEarthNet.txt's binary questions all do.
+# A question is yes/no when it opens with an auxiliary verb; BigEarthNet.txt's binary questions all do, and all
+# end with "?" (every one of the 18,000+ in data/b1_v2). "Can you detect ...?" and "Would you classify ...?" are
+# among them, so "can you" alone does not make a request.
 BINARY_OPENERS = re.compile(
     r"^\s*(is|are|was|were|do|does|did|can|could|would|will|has|have|should|may|might)\b", re.IGNORECASE
 )
+# "Do" and "Did" also open imperatives ("Do descriptive analysis"), so without a "?" they are not questions.
+IMPERATIVE_OPENERS = re.compile(r"^\s*(do|did)\b", re.IGNORECASE)
+# A request for a description, however it opens: "Can you describe ...", "Could you please give ...".
+DESCRIPTION_REQUEST = re.compile(
+    r"^\s*\w+\s+(?:you\s+)?(?:please\s+)?"
+    r"(describe|explain|summari[sz]e|analy[sz]e|tell|give|list|elaborate|characteri[sz]e|write|provide)\b"
+    r"|\banalysis\b",
+    re.IGNORECASE,
+)
 DEFAULT_ADAPTER = ROOT / "data" / "b5_run2" / "adapter_final"
+# At 64 tokens 4 of the base model's 15 free-form replies in data/b5_eval/freeform_compare.json stopped mid-list.
+FREE_FORM_TOKENS = 128
 
 
 def question_kind(question):
-    """'mcq' when the question lists a) to d) options, 'binary' when it opens with an auxiliary verb, else 'free'."""
+    """'mcq' when the question lists a) to d) options; 'binary' when it opens with an auxiliary verb, is not a
+    request for a description, and (for "do"/"did") ends with "?"; else 'free'."""
     if len(parse_options(question)) >= 2:
         return "mcq"
-    if BINARY_OPENERS.match(question):
-        return "binary"
-    return "free"
+    if not BINARY_OPENERS.match(question) or DESCRIPTION_REQUEST.search(question):
+        return "free"
+    if IMPERATIVE_OPENERS.match(question) and not question.rstrip().endswith("?"):
+        return "free"
+    return "binary"
 
 
 def candidates(question, kind):
@@ -72,10 +91,11 @@ def answer_text(question, kind, answer):
 class Engine:
     """Holds the model; one request at a time, since a 4 GB card has room for exactly one."""
 
-    def __init__(self, adapter, size):
+    def __init__(self, adapter, size, free_form="base"):
         from b5_common import MODEL_ID, REVISION, load_model
 
         self.model_id, self.revision, self.adapter, self.size = MODEL_ID, REVISION, str(adapter), size
+        self.free_form = free_form
         self.model, self.processor, _ = load_model(adapter=str(adapter))
         self.model.eval()
         self.lock = threading.Lock()
@@ -84,13 +104,17 @@ class Engine:
         ids = self.processor.tokenizer.encode(text, add_special_tokens=False)
         return ids[0]
 
-    def answer(self, image_path, question):
+    def answer(self, image_path, question, free_form=None):
+        """`free_form` ('base' or 'adapter') overrides the server's --free-form choice for this call."""
+        import contextlib
+
         import torch
         from PIL import Image
 
         from b5_common import prompt_text
 
         kind = question_kind(question)
+        answered_by = "adapter" if kind != "free" else (free_form or self.free_form)
         image = Image.open(image_path).convert("RGB").resize((self.size, self.size), Image.BICUBIC)
         enc = self.processor(text=[prompt_text(self.processor, question)], images=[image], return_tensors="pt")
         enc = enc.to(self.model.device)
@@ -104,8 +128,9 @@ class Engine:
         captured = []
         hook = lm_head.register_forward_hook(lambda _m, inputs, _o: captured.append(inputs[0][:, -1, :]))
         try:
-            with self.lock, torch.no_grad():
-                out = self.model.generate(**enc, max_new_tokens=8 if kind != "free" else 64, do_sample=False,
+            adapter_off = self.model.disable_adapter() if answered_by == "base" else contextlib.nullcontext()
+            with self.lock, torch.no_grad(), adapter_off:
+                out = self.model.generate(**enc, max_new_tokens=8 if kind != "free" else FREE_FORM_TOKENS, do_sample=False,
                                           return_dict_in_generate=True)
         finally:
             hook.remove()
@@ -126,6 +151,7 @@ class Engine:
         return {
             "kind": kind,
             "trained_format": kind != "free",
+            "answered_by": answered_by,
             "answer": answer,
             "answer_text": answer_text(question, kind, answer),
             "probability": probability,
@@ -135,12 +161,15 @@ class Engine:
             "model": self.model_id,
             "revision": self.revision,
             "adapter": self.adapter,
-            "adapter_id": f"{Path(self.adapter).parent.name}_lora (Qwen2-VL-2B-Instruct 4-bit)",
+            "adapter_id": (f"{Path(self.adapter).parent.name}_lora (Qwen2-VL-2B-Instruct 4-bit)"
+                           if answered_by == "adapter" else "Qwen2-VL-2B-Instruct 4-bit (base, adapter off)"),
         }
 
 
 def build_app(engine):
     from fastapi import FastAPI, HTTPException
+    from typing import Literal, Optional
+
     from pydantic import BaseModel
 
     app = FastAPI(title="SatQuery VQA model server")
@@ -148,11 +177,12 @@ def build_app(engine):
     class VqaRequest(BaseModel):
         image_path: str
         question: str
+        free_form: Optional[Literal["base", "adapter"]] = None
 
     @app.get("/health")
     def health():
         return {"status": "ok", "loaded": True, "model": engine.model_id, "revision": engine.revision,
-                "adapter": engine.adapter}
+                "adapter": engine.adapter, "free_form": engine.free_form}
 
     @app.post("/vqa")
     def vqa(req: VqaRequest):
@@ -162,7 +192,7 @@ def build_app(engine):
         if not req.question.strip():
             raise HTTPException(status_code=400, detail="empty question")
         try:
-            return engine.answer(path, req.question.strip())
+            return engine.answer(path, req.question.strip(), req.free_form)
         except OSError as exc:  # PIL cannot decode the file
             raise HTTPException(status_code=400, detail=f"cannot read image: {exc}") from exc
 
@@ -175,6 +205,8 @@ def main():
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8001)
     ap.add_argument("--size", type=int, default=448, help="square input size; 448 is what run 2 trained at")
+    ap.add_argument("--free-form", choices=["base", "adapter"], default="base",
+                    help="who answers free-form questions: the base model (adapter off) or the adapter")
     args = ap.parse_args()
 
     # The model is cached at the pinned revision; a demo must not reach the network.
@@ -186,7 +218,7 @@ def main():
     import uvicorn
 
     print(f"loading {args.adapter} ...", flush=True)
-    engine = Engine(args.adapter, args.size)
+    engine = Engine(args.adapter, args.size, args.free_form)
     print("model loaded", flush=True)
     uvicorn.run(build_app(engine), host=args.host, port=args.port)
 

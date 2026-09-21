@@ -13,6 +13,7 @@ class RejectionReasonCode(str, Enum):
     INSUFFICIENT_FOOTPRINT_OVERLAP = "insufficient_footprint_overlap"
     TEMPORAL_ORDERING_INVALID = "temporal_ordering_invalid"
     AMBIGUOUS_INTENT = "ambiguous_intent"
+    NO_TRAINED_MODEL = "no_trained_model"
 
 
 class ValidationPass(CamelModel):

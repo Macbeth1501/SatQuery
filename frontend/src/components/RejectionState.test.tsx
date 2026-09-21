@@ -49,6 +49,20 @@ describe('RejectionState actions', () => {
     expect(screen.queryByText('Physical Input Precondition Rejection')).not.toBeInTheDocument();
     expect(screen.getByText('Rephrase Query')).toBeInTheDocument();
   });
+
+  it('says plainly when no trained model exists for the task', () => {
+    const reason = "No trained model exists yet for 'change_vqa'.";
+    render(
+      <RejectionState
+        rejection={{ ...modalityMismatch, reasonCode: 'no_trained_model', humanReadableReason: reason }}
+      />,
+    );
+    expect(screen.getByText('No Trained Model for This Task Yet')).toBeInTheDocument();
+    expect(screen.getByText(reason)).toBeInTheDocument();
+    expect(screen.getByText('Ask a Different Question')).toBeInTheDocument();
+    expect(screen.queryByText('Switch to Optical-SAR Fusion Query')).not.toBeInTheDocument();
+    expect(screen.queryByText('Physical Input Precondition Rejection')).not.toBeInTheDocument();
+  });
 });
 
 describe('ExecutionTrace on a rejected session', () => {
