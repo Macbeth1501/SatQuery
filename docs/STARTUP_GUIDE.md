@@ -129,7 +129,7 @@ Tick each box; the expected result is beside it.
   `Live backend call unfulfilled, falling back to client-side scenario`
 
 **Optional, from the repo root**
-- [ ] `python -m pytest` gives 152 passed (set `PROJ_DATA` and `PROJ_LIB`, see section 9)
+- [ ] `python -m pytest` gives 158 passed (set `PROJ_DATA` and `PROJ_LIB`, see section 9)
 - [ ] From `frontend/`: `npm test` (58 passed), `npm run build`, `npm run lint` (two known warnings)
 
 ## 8. Known rough edges (avoid or pre-empt)

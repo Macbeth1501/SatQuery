@@ -34,9 +34,9 @@ inference layer is stubbed.
 | Pillow bounding-box and change-mask overlays | Complete |
 | Session persistence | Complete — SQLite (see the datastore row below); legacy `response.json` files are imported on first read |
 | React frontend, 3 routes, 15 components | Complete, verified in-browser |
-| Test suite: 152 pytest + 58 Vitest tests | All passing (12 new in `tests/test_ml.py`, which skip when scikit-learn, scipy or torch are missing) |
+| Test suite: 158 pytest + 58 Vitest tests | All passing (18 in `tests/test_ml.py`, which skip when scikit-learn, scipy or torch are missing) |
 | Demo inputs | Seven georeferenced GeoTIFFs in `frontend/public/demo/` (scenarios A, C, D, E, and G which reuses C's pair reversed); B and F stay plain PNGs on purpose. Georeferencing is real, the pictures are synthetic |
-| ML training side (`ml/`) | B1 thin slice built and verified; B5 LoRA train/eval/notebook written; baseline evaluated; **first thin adapter trained locally (300 steps, 3 h 38 min) and scored on the bench sample** (`data/b5_run1/adapter_final`, `data/b5_eval/tuned.json`). Not wired into the backend. `tests/test_ml.py` (12 tests) covers the CPU-side pieces (option parser, text-only baseline, raking, sampler, McNemar, answer parser); training, extraction and GPU evaluation have no automated tests |
+| ML training side (`ml/`) | B1 thin slice built and verified; B5 LoRA train/eval/notebook written; baseline evaluated; **run 1 (old leaky slice, `data/b5_run1/adapter_final`) showed no evidence of image reading; run 2 (leak-neutral `data/b1_v2`, 300 steps in 1 h 43 min, `data/b5_run2/adapter_final`) passes the pre-registered test on `bench_hard` main (+6.1 binary, +8.6 mcq over text-only) but its binary lead is gone on held-out tiles (held-out mcq keeps +8.6)**. Not wired into the backend. `tests/test_ml.py` (18 tests) covers the CPU-side pieces (option parser, text-only baseline, raking, sampler, McNemar, answer parser, change rate, resumable training state on a toy model); training, extraction and GPU evaluation have no automated tests |
 | **Specialist inference** | **Dummy — `ScenarioEngine` lookup, no model** |
 | **Optical/SAR fusion** | **Dummy — hardcoded region tags** |
 | Raster metadata extraction | Read from the file (CRS, bands, GSD, footprint, NoData, timestamp) |
@@ -66,11 +66,12 @@ fusion query, returning HTTP 200 with a full trace rather than an error.
 
 ## Next step
 
-**Standing (2026-09-20, plan approved by the owner, awaiting "go"):** `docs/STARTUP_GUIDE.md` is written (how to start
-the demo and a manual test checklist; not yet walked through in a browser). The Phase 2 plan is approved: VRAM gate,
-control, the two missing code pieces (optimiser save **and** `--resume`; `ml/b5_change_rate.py`), retrain, six-run
-scoring. Nothing has run on the GPU and nothing under `ml/` has changed. Free VRAM read 2,902 MiB (below the ~3,100 bar;
-the desktop apps must be closed before the retrain).
+**Standing (2026-09-21, Phase 2 under way, owner said "go" for steps 1-5):** steps 1-3 are done (see the History
+entries: run 1 misses the primary bar, +4.1 binary and +1.7 mcq over text-only). **Phase 2 (steps 1-5) is complete.** Run 2 (`data/b5_run2/adapter_final`) passes the pre-registered primary and secondary
+tests on `bench_hard` main (+6.1 binary, +8.6 mcq over text-only) but its binary lead vanishes on held-out tiles; held-out mcq
+keeps +8.6. See the newest History entry. **Owner decision needed on what comes next** (B6 grounding, C0, more bench patches to
+fill the thin categories, or a repeat seed); nothing further has been started.
+`docs/STARTUP_GUIDE.md` is written but not yet walked through in a browser.
 
 **Decision taken 2026-09-20 (owner): train the first B5 adapter locally, not on Kaggle.** This rests on the
 measured dry runs recorded in the Development Plan under D2 (QLoRA fit on the RTX 3050); it amends D2's
@@ -90,15 +91,13 @@ measured dry runs recorded in the Development Plan under D2 (QLoRA fit on the RT
    leak, which shrinks the slice), then retrain and judge by the lead over the text-only model; (b) a real
    held-out-tile test built from the raw bench archive; (c) B6 (grounding boxes) or C0. Scaling the current
    recipe is not recommended. See the History entries.
-3. **Decision taken 2026-09-20 (owner): route (a), with the filter replaced by leak-neutral resampling.**
-   **Phase 1 (CPU only) is done and uncommitted; Phase 2 (about 7 GPU hours: control ~1 h 20, retrain ~3 h 40, six scoring runs ~2 h 15) has NOT started and waits for the
-   owner to commit and reboot.** Phase 1 built `data/b1_v2/` (19,489 training and 1,197 validation examples on
-   17,121 and 1,017 patches, 6 Sentinel tiles reserved) and `data/b1_v2/bench_hard.jsonl` (3,000 examples), and
-   the text-only baseline scores at chance on all of them (History, newest entry). Phase 2 order: (i) re-score
-   `adapter_final` on `bench_hard`, real image, grey image and mismatched image (the control, about 80 min for three conditions on `--part main`; it
-   may make a retrain unnecessary); (ii) retrain on `data/b1_v2` (~3 h 40 min) after `b5_train_lora.py` is
-   made to save and restore optimiser state (`--data data/b1_v2` already works; no re-pointing is needed); (iii) score the new adapter and compare with
-   `ml/b5_compare.py` against the pass/fail test in the plan. Free VRAM read 3,303 MiB at the end of Phase 1.
+3. **Decision taken 2026-09-20 (owner): route (a), with the filter replaced by leak-neutral resampling. Done.**
+   Phase 1 (CPU) built `data/b1_v2/` (19,489 training and 1,197 validation examples on 17,121 and 1,017 patches, 6
+   Sentinel tiles reserved) and `data/b1_v2/bench_hard.jsonl` (3,000 examples), on which the text-only baseline scores at
+   chance. Phase 2 (2026-09-21) ran the control (run 1 misses the primary bar), the retrain (`data/b5_run2`) and the six-run
+   scoring; results in the two newest History entries. **Open: what to do with run 2.** Options, none started: fill the
+   thin bench categories with more extracted patches (not approved so far), a repeat seed to see whether the held-out mcq
+   lead is stable, B6 (grounding boxes), or C0 before any wiring.
 4. Nothing may be wired into `backend/` before C0.
 
 Independent and still open: **A6** (map layer, unblocked), **C0** (must precede wiring any adapter into the
@@ -166,9 +165,11 @@ Real, known, not yet fixed (as opposed to "Known limitations", which are accepte
    RTX 3050 with 4 GB usable VRAM). **D2's "training goes to the cloud" was amended by measurement and then
    by the owner: QLoRA does fit on this card, and the first adapter was trained locally** (300 steps,
    3 h 38 min, peak 2,913 MiB). So training code and one adapter now exist — `ml/b1_slice.py`,
-   `ml/b5_common.py`, `ml/b5_train_lora.py`, `ml/b5_eval.py`, `ml/b1_v2.py`, `ml/b5_deleak.py`, `ml/b5_text_only.py`, `ml/b5_compare.py`, and `data/b5_run1/adapter_final` — and the
-   dataset work is the B1 thin slice plus the extracted `bench` subset of BigEarthNet.txt (see History).
-   What is *not* built: any evidence that the adapter reads imagery, and any link to `backend/`.
+   `ml/b5_common.py`, `ml/b5_train_lora.py`, `ml/b5_eval.py`, `ml/b1_v2.py`, `ml/b5_deleak.py`, `ml/b5_text_only.py`, `ml/b5_compare.py`, `ml/b5_change_rate.py`, and the adapters `data/b5_run1/adapter_final` and
+   `data/b5_run2/adapter_final` — and the dataset work is the B1 thin slice, the leak-neutral `data/b1_v2` and the
+   extracted `bench` subset of BigEarthNet.txt (see History).
+   What is *not* built: evidence that the adapter reads imagery on unseen tiles for binary questions (run 2 shows it only for
+   mcq), and any link to `backend/`.
    The revision is pinned: `895c3a49bc3fa70a340399125c650a463535e71c`, downloaded to
    `data/hf_cache/` (4.2 GB, gitignored). **A6 (map layer)** is unblocked by Open item 5 but not started. A8 has one known gap: reopened
    sessions show no source imagery (needs an `inputImages` field and DB migration 2).
@@ -250,6 +251,105 @@ Accepted for the prototype, not defects to fix now:
 ---
 
 ## History
+
+### 2026-09-21 — Phase 2 step 5: run 2 scored (six runs); passes on tiles seen in training, does not generalise on binary
+
+Sources: `data/b5_eval/run2_hard_{main,heldout}{,_blind,_mismatch}.json` and `textonly_run2_hard.json` (text-only model fitted
+on `data/b1_v2/train.jsonl`). Unreadable replies: 0 everywhere except 1 binary reply in each of heldout blind and mismatch.
+
+| | main binary | main mcq | heldout binary | heldout mcq |
+|---|---|---|---|---|
+| Real image | 55.3% | 34.5% | 50.1% | 32.9% |
+| Grey image | 48.1% | 27.3% | 51.2% | 28.5% |
+| Mismatched image | 48.8% | 28.5% | 49.1% | 28.0% |
+| **Lead over text-only** (paired, 95% CI, McNemar p) | **+6.1** (2.1 to 10.0), p = 0.003 | **+8.6** (3.8 to 13.2), p = 0.0006 | **-0.5** (-6.0 to 5.0), p = 0.91 | **+8.6** (3.3 to 13.6), p = 0.002 |
+| **Real minus grey** | **+7.2** (4.1 to 10.0), p < 0.0001 | **+7.3** (3.5 to 10.7), p = 0.0002 | **-1.2** (-5.1 to 2.9), p = 0.63 | **+4.4** (0.1 to 8.4), p = 0.052 |
+| Answer change, real vs mismatched | 23.7% | 43.8% | 17.2% | 44.8% |
+| Answer change, real vs grey | 28.8% | 42.1% | 26.2% | 44.1% |
+
+Overall answer change, real vs mismatched: 30.9% main, 30.3% heldout. Text-only scores 49.7% binary and 25.2% mcq over all
+3,000 rows, i.e. chance, which is why the leads are larger than run 1's.
+
+**Against the pre-registered test.** *Primary (main):* **PASS**, 6.1 on binary and 8.6 on mcq, same sign, both p < 0.05.
+*Secondary (main):* **PASS**, 7.2 and 7.3 points, both p < 0.05. *Tertiary:* overall change against a mismatched image 30.9%
+(above 25%), but binary alone is 23.7%, just below it. *Generalisation:* **binary does not generalise.** On the held-out
+tiles binary has no lead over text-only (-0.5, p = 0.91) and real is not better than grey, so the main binary result is stated
+as "on tiles seen in training". Held-out mcq keeps a lead over text-only (+8.6, p = 0.002) and real beats grey by 4.4 (p = 0.052,
+just short of significance).
+
+**By category** (only groups with n of at least 100). Main, real vs grey: binary/adjacency 55.0 vs 50.1, binary/presence 55.4
+vs 45.0, mcq/adjacency 38.6 vs 35.8, mcq/area 29.6 vs 22.4. Held-out: binary adjacency 47.5 vs 50.7 and presence 50.0 vs 50.0
+(no image effect), mcq/adjacency 32.2 vs 34.5 (none), mcq/area 30.6 vs 21.3 (image effect). **Unreadable, not passes:** climate
+zone, country, count, presence (mcq), relative position and season have too few rows (under 100, most under 25).
+
+**Cautions.** The lead is measured against a text-only model that is at chance on the new set, so the leads are not comparable to
+run 1's, and run 2's absolute mcq accuracy (34.5% main) is lower than run 1's (36.7%). The evidence for image reading is
+concentrated in mcq/area on held-out tiles and in main binary presence; adjacency questions show none on held-out tiles.
+One training run, one seed, no repeat. `--resume` remains unexercised on the real model. No `backend/` or `frontend/` change.
+Nothing is wired into the pipeline (C0 must come first).
+
+**Docs refreshed the same day:** this log (status row, Next step, Open item 4), `CLAUDE.md` (ML paragraph), `docs/STARTUP_GUIDE.md`
+(158 tests), `docs/SatQuery_AI_Development_Plan.md` (B5 status) and `docs/HANDOFF_PROMPT.md` (rewritten: Phase 2 is done, the next
+session asks for the follow-up decision). Files (uncommitted): `ml/b5_train_lora.py`, `ml/b5_change_rate.py`, `tests/test_ml.py`
+and the docs above.
+
+### 2026-09-21 — Phase 2 step 4: run 2 trained on `data/b1_v2` (`data/b5_run2`)
+
+`ml/b5_train_lora.py --data data/b1_v2 --out data/b5_run2 --size 448 --max-steps 300 --grad-accum 16 --eval-every 100
+--eval-n 100 --save-every 100`, all other hyperparameters at the run-1 defaults. **300 steps in 6,192 s (1 h 43 min),
+against the ~3 h 40 estimate and run 1's 3 h 38; the reason for the speed-up was not investigated.** 0 non-finite steps,
+peak 2,934 MiB. Validation (92 choice questions each time, too few to read a trend): loss 0.590 / 0.545 / 0.541 and choice
+accuracy 40.2% / 41.3% / 42.4% at steps 100 / 200 / 300. Outputs: `adapter_step{100,200,300}`, `adapter_final`,
+`state_step{100,200,300}.pt`, `train_log.jsonl`. **`--resume` was not exercised** (the run did not die), so it remains
+tested only on a toy model. Validation numbers say nothing about image reading; step 5 (six-run scoring) decides that.
+
+### 2026-09-21 — Phase 2 step 3: run 1 re-scored on `bench_hard` main; it does not clear the primary bar, so the retrain goes ahead
+
+Run 1 (`data/b5_run1/adapter_final`, trained on the old leaky slice) on `bench_hard` **main** (1,186 binary, 660 mcq, no
+unreadable replies in any condition). Sources: `data/b5_eval/run1_hard_main{,_blind,_mismatch}.json`,
+`textonly_run1_hard.json` (text-only model fitted on `data/b1_slice/train.jsonl`, scored on the same rows).
+
+| Measure | Binary | MCQ |
+|---|---|---|
+| Real image | 54.2% | 36.7% |
+| Grey image | 47.8% | 30.3% |
+| Mismatched image | 49.2% | 31.8% |
+| Text-only | 50.1% | 35.0% |
+| **Lead over text-only** (paired) | **+4.1 pts, p = 0.012** | **+1.7 pts, p = 0.53** |
+| **Real minus grey** (paired) | **+6.4 pts, p = 1e-5** | **+6.4 pts, p = 0.004** |
+| Answer change, matched vs mismatched | 20.5% | 40.9% (all: 27.8%, CI 25.8-29.9%) |
+| Answer change, matched vs grey | 25.0% | 49.1% (all: 33.6%) |
+
+**Against the pre-registered test.** Primary (lead over text-only): needs 5+ on both types; binary is 4.1 and mcq 1.7 with
+p = 0.53, so it is **not a pass**, nor a weak pass (no type reaches 5). Secondary (real minus grey): **passes** on both
+types. Tertiary: the overall change rate is above 25%, binary alone is below it. Because the primary bar is missed, the
+rule says retrain. **Reading:** unlike on the old bench, run 1 does show some dependence on the image (grey and mismatched
+pictures both hurt it), but its edge over a model with no image is small on binary and absent on mcq. This is run 1 only;
+it is not evidence about run 2. Only the `main` part was scored, so tile memorisation is not separated out here.
+
+### 2026-09-20 — Phase 2 steps 1-2: VRAM gate passed; resumable training and `b5_change_rate.py` written (CPU only)
+
+**Step 1.** After a restart `nvidia-smi` read **362 MiB used, 3,603 MiB free of 4,096** (the owner saw 384 MiB idle a
+moment earlier; the difference is normal drift). That clears the ~3,100 MiB bar, so the retrain uses `--size 448` as in
+run 1. The processes still on the GPU are Windows shell components, Edge WebView2, Armoury Crate and VS Code; re-check
+right before step 4.
+
+**Step 2a, `ml/b5_train_lora.py`.** New pure functions `save_state`, `load_state` and `newest_state`. At each
+`--save-every` and at the end it now writes `state_step{N}.pt` beside the adapter (optimiser and GradScaler state, step,
+data cursor and shuffle order, skipped-step count, the total step count, and the Python, torch and CUDA RNG states).
+`--resume DIR` reloads the newest state, restores the adapter weights from `adapter_step{N}` (or `adapter_final`) with
+`set_peft_model_state_dict`, and restarts the loop at the saved step. It refuses a state saved for a run of a different
+length, because the cosine schedule would not match. **The resume path is tested only on a toy model on CPU; it has not
+been run against the real 4-bit Qwen model**, so the first real resume is still unproven.
+
+**Step 2b, `ml/b5_change_rate.py`.** Pairs two `b5_eval.py` results on `(type, id)` and reports the changed share overall,
+per type and per `type/category`, with a Wilson 95% interval; a pair where either side has `parsed is None` goes in its
+own bucket and counts neither as change nor agreement. It raises `SystemExit` on a file with no `replies`.
+
+**Tests: 158 pytest passing** (152 before). Six were added to `tests/test_ml.py`, not the four the handoff expected: four
+for the change rate, two for training state (identical continuation of optimiser, batch order, parameters and RNG after a
+restore; refusal on a length mismatch). No `backend/` or `frontend/` change, no GPU use. Files (uncommitted):
+`ml/b5_train_lora.py`, `ml/b5_change_rate.py`, `tests/test_ml.py`, `docs/PROGRESS_LOG.md`.
 
 ### 2026-09-20 — Phase 2 planned (owner-approved); startup guide written; six stale statements corrected
 
