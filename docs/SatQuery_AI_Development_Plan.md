@@ -653,7 +653,7 @@ B1 (data contracts/schemas) ───────────────┼─�
 |---|---|---|---|
 | **F0** Project setup | Vite + React + TS skeleton, folder structure, router, lint baseline. | — | DONE |
 | **F1** API types & client | TypeScript mirrors of the SPDD §8 contracts in one `types.ts`; one client function per endpoint; a normalized error result distinguishing `400` / `503` / network failure. | F0, logically B1 | DONE |
-| **F2** Upload & query page | Drop-zone accepting 1–2 files with client-side extension/count checks (UX pre-check only — the server remains the authority); query box; capability hints from `/v1/registry`; submit handler with elapsed-time feedback. | F0, F1 | DONE |
+| **F2** Upload & query page | Drop-zone accepting 1–2 files with client-side extension/count checks (UX pre-check only — the server remains the authority); query box; capability hints from `/v1/registry`; submit handler with elapsed-time feedback. | F0, F1 | DONE — 2026-09-21: drag-and-drop now implemented (it was advertised only); cards filled from `POST /v1/inspect` instead of invented values; removing an image clears its file |
 | **F3** Results core | Page shell, answer panel, confidence badge (green/amber/red + visible rationale). Early-returns to F6 when `rejected`. | F0–F2 | DONE |
 | **F4** Evidence overlay | Base image plus absolutely-positioned overlay; convert 0–100 coordinates to pixels; honour `theta`; render **all** grounding candidates with score-varied styling; per-layer toggles; layer server-rendered change masks without client-side vectorization. | F0, F1, F3 | DONE |
 | **F5** Execution trace panel | Collapsible, open by default; step table; confidence tier and rationale repeated for a self-contained screenshot; handles the rejection-trace case where `steps` may be short. | F0, F1 | DONE |
@@ -1039,6 +1039,10 @@ actually replaced.
 `scenario_engine.get_dynamic_result()` directly, not only the specialist adapters. If
 those call sites survive, the scorer will keep overriding real model confidence with
 canned rationales and the swap will appear to work while silently doing nothing.
+> **C0 status: PARTIAL (2026-09-21).** Done for the single-image path only. When a trained adapter answers
+> (`SATQUERY_VQA_MODEL_URL` set), `ConfidenceScorer` takes the tier from the model's own probability and never
+> calls the scenario engine, and the router skips the demo grounding call. `ComplementarityDetector`,
+> `MultimodalVerbalizer` and the scorer's demo path still call it.
 
 **C1 — Query interpreter wiring** *(B5, needs Track B3)*. Call the model, validate against
 `TaskSpec`, retry once with a repair prompt on validation error, raise a typed error on
@@ -1052,6 +1056,13 @@ dummy calls with HTTP wrappers carrying per-call timeouts aligned to the latency
 Preserve multi-box and quantity fields untouched. Execute dependent compound plans in
 strict sequence. Distinguish "specialist errored" (partial results, confidence forced to
 Low) from "model serving is unreachable" (a 503) — they need different HTTP responses.
+> **C2 status: PARTIAL (2026-09-21).** One specialist is wired. `ml/serve_vqa.py` serves the B5 run-2 adapter over
+> HTTP, and `backend/app/services/model_client.py` calls it with a configurable timeout. An unreachable server
+> returns 503 and an unusable reply returns 502; neither falls back to demo output. Single-image VQA and captioning
+> only. Grounding, change and fusion are still in-process dummies, and there is no latency budget yet. The website offers
+> five real BigEarthNet patches with 23 reference-graded questions on this path (23 of 23 correct in the browser).
+> The keyword interpreter was narrowed so these questions reach it: bare "between" is no longer a change cue, and a
+> question listing a)–d) options is never grounding or captioning.
 
 **C3 — Fusion orchestration** *(B9, needs Track B9/B10)*. Add the
 `trained` / `rule_based` config switch **at a single call site**, not scattered through

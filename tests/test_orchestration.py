@@ -32,6 +32,23 @@ def test_all_eight_task_types_are_reachable(client, query, filenames, expected_t
 
 
 @pytest.mark.parametrize(
+    "query",
+    [
+        # "between" describes a range or an adjacency here, not two dates.
+        "Is the total area of pastures between 0 sqm and 576000 sqm?",
+        "Is there direct adjacency between any instance of pastures and arable land in the scene?",
+        # A choice question that says "where is" still asks for an option, not for boxes.
+        "In relation to the arable land, where is the coniferous forest located in the image? "
+        "a) to the bottom, b) to the right, c) to the left, d) to the top",
+    ],
+)
+def test_single_image_questions_are_not_misread_as_change_or_grounding(client, query):
+    res = analyze(client, query, [OPTICAL])
+    assert res["rejected"] is False
+    assert res["executionTrace"]["selectedTaskType"] == "single_vqa"
+
+
+@pytest.mark.parametrize(
     "query, filenames, reason_code",
     [
         ("hi", [OPTICAL], "ambiguous_intent"),

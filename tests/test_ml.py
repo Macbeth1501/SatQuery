@@ -1,4 +1,5 @@
-"""The CPU-side pieces of the ML track: option parsing, the text-only baseline, leak raking, paired testing.
+"""The CPU-side pieces of the ML track: option parsing, the text-only baseline, leak raking, paired testing,
+and the question handling of the model server.
 
 `ml/` is not a package, so its modules are put on sys.path. scikit-learn, scipy and torch are not backend
 dependencies; each group of tests skips cleanly when its libraries are missing (they are present in `.venv-ml`).
@@ -14,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ml"))
 import b5_change_rate as R  # noqa: E402
 import b5_compare as C  # noqa: E402
 import b5_text_only as T  # noqa: E402
+import serve_vqa as S  # noqa: E402  (its torch imports are deferred to model loading)
 
 
 def mcq(qid, category, options, answer, patch=None):
@@ -268,3 +270,28 @@ def test_resume_refuses_a_state_from_a_run_of_a_different_length(tmp_path):
     L.save_state(tmp_path / "state_step1.pt", opt, scaler, 1, 0, [0], 0, 300)
     with pytest.raises(SystemExit):
         L.load_state(tmp_path / "state_step1.pt", opt, scaler, 100)
+
+
+# ---- model server question handling (ml/serve_vqa.py) ------------------------------------------------------
+
+def test_server_tells_the_three_question_kinds_apart():
+    assert S.question_kind("Do pastures cover at least 90% of the image?") == "binary"
+    assert S.question_kind("Is there any urban fabric?") == "binary"
+    assert S.question_kind("How much of the scene do arable lands cover? a) 90 to 100%, b) 30 to 60%, "
+                           "c) 0 to 20%, d) 60 to 80%") == "mcq"
+    assert S.question_kind("Describe the land cover in this image.") == "free"
+    # an opener inside a word is not an auxiliary verb
+    assert S.question_kind("Island coastlines: describe them.") == "free"
+
+
+def test_server_offers_only_the_options_the_question_lists():
+    assert S.candidates("Is it wet?", "binary") == ["yes", "no"]
+    assert S.candidates("Pick: a) x, b) y, c) z", "mcq") == ["a", "b", "c"]
+    assert S.candidates("Describe it.", "free") == []
+
+
+def test_server_puts_the_option_text_back_beside_its_letter():
+    q = "Pick the touching pair: a) Pastures and Permanent crops, b) Arable land and Pastures, c) x, d) y"
+    assert S.answer_text(q, "mcq", "b") == "b) Arable land and Pastures"
+    assert S.answer_text("Is it wet?", "binary", "no") == "No"
+    assert S.answer_text("Describe it.", "free", "Farmland.") == "Farmland."

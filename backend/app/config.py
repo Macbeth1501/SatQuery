@@ -99,6 +99,17 @@ OPTICAL_CLOUD_DEGRADED_PERCENT = _env_float("OPTICAL_CLOUD_DEGRADED_PERCENT", 40
 # Interpreter confidence at or above this is required for the baseline High tier.
 HIGH_INTENT_CONFIDENCE = _env_float("HIGH_INTENT_CONFIDENCE", 0.85, 0.0, 1.0)
 
+# --- Real model (single-image VQA only) --------------------------------------
+# Base URL of the model server started by `ml/serve_vqa.py` (e.g. http://127.0.0.1:8001).
+# Unset (the default) keeps the deterministic demo specialists; set, single-image questions
+# are answered by the trained adapter and every other task stays on the demo engine.
+# Read as `config.VQA_MODEL_URL` at call time, so tests can switch it on and off.
+VQA_MODEL_URL = _raw("VQA_MODEL_URL")
+VQA_MODEL_TIMEOUT_SECONDS = _env_float("VQA_MODEL_TIMEOUT_SECONDS", 60.0, 1.0, 600.0)
+# The model's own answer probability at or above this gives Medium; below it, Low. A real
+# model answer is never High: run 2 scores ~33% on held-out multiple choice (chance 25%).
+MODEL_MEDIUM_PROBABILITY = _env_float("MODEL_MEDIUM_PROBABILITY", 0.75, 0.0, 1.0)
+
 # --- CORS --------------------------------------------------------------------
 # Comma-separated list. The default is the Vite dev server only: a wildcard combined
 # with credentialed requests is unsafe, so it is no longer part of the default.

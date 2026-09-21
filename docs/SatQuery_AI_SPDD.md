@@ -442,6 +442,9 @@ Base path: `/v1`. All endpoints return `application/json` except where noted.
 - **Body:** multipart form — `images[]` (1–2 files) + `query` (string) + optional `sessionOptions` (JSON string field).
 - **Response:** `AnalyzeResponse` (§8.5). `200` on success or graceful rejection (rejections are NOT a 4xx — a validated-but-unsatisfiable query is a normal, expected outcome and is returned as `rejected: true` with a `200`, per the design goal of the Compatibility Validator being a first-class, non-exceptional part of the flow). Malformed requests (missing query, unsupported file type Content-Type) DO return `400`.
 - **Latency target:** see §13.1.
+- **Implementation note (2026-09-21):** when a specialist is served by a model server that cannot be reached, the
+  response is `503` with a `detail` naming the server; when that server answers unusably, `502`. Neither falls back to
+  demo output. Today this applies to single-image VQA/captioning with `SATQUERY_VQA_MODEL_URL` set.
 
 ### 9.2 `GET /v1/session/{sessionId}`
 - Returns the persisted `AnalyzeResponse` for a prior session (for re-opening a trace panel or re-downloading a report without recomputing).
@@ -455,6 +458,17 @@ Base path: `/v1`. All endpoints return `application/json` except where noted.
 
 ### 9.5 `GET /v1/registry`
 - Returns the current specialist registry (adapter IDs, versions, and their precondition blocks from §4.2) — used by the frontend to render capability hints and by integration tests to assert the router/validator tables are in sync.
+
+### 9.7 `POST /v1/inspect` (added 2026-09-21)
+- **Body:** multipart form, one `file`.
+- **Response:** `{ metadata: ImageMetadata (§8), previewDataUrl: string | null }`. The metadata is read by the same
+  extractor `/v1/analyze` uses, so unknown fields are `null`, never guessed. `previewDataUrl` is a PNG (longest side ≤ 512
+  px): 8-bit images via Pillow, other rasters via a 2-98 percentile stretch. It is `null` when the file cannot be
+  decoded.
+- Nothing is persisted: the bytes are written under a fixed name in a temporary directory and deleted before the
+  response. The client's filename is only a label.
+- Used by the upload page so the image card shows what the file says before any analysis, and so a TIFF, which browsers
+  cannot display, gets a preview.
 
 ### 9.6 `report_service` (internal, not directly HTTP-exposed beyond §9.3)
 - Consumes a persisted `ExecutionTrace` + `EvidenceLedger` + original images, renders a PDF via `weasyprint` (HTML template → PDF) and a parallel raw JSON export. The PDF template MUST include: query text, answer, confidence badge + rationale, evidence images with overlays, and the full step-by-step execution trace table — i.e., it is a direct rendering of already-computed data, not a component that computes anything new.
@@ -525,7 +539,7 @@ This intentionally minimal schema (JSON-blob storage keyed by session) is a deli
 ## 12. Frontend / UI Design
 
 ### 12.1 Page structure
-1. **Upload & Query page** — drag-and-drop for 1–2 images, format/size validation client-side (mirrors, does not replace, server-side validation), a text query box, and a "capability hint" panel populated from `GET /v1/registry` (§9.5) so users can see what's supported before submitting.
+1. **Upload & Query page** — drag-and-drop for 1–2 images, format/size validation client-side (mirrors, does not replace, server-side validation), a text query box, and a "capability hint" panel populated from `GET /v1/registry` (§9.5) so users can see what's supported before submitting. Each picked file's card is filled from `POST /v1/inspect` (§9.7); the client never invents CRS, GSD or dates.
 2. **Results page** — the `AnalyzeResponse` rendered as:
    - Answer text panel.
    - Map/image viewer with evidence overlays (boxes/masks) toggle-able per evidence item.

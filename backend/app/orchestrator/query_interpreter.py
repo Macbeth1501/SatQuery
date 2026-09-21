@@ -1,6 +1,11 @@
+import re
 from typing import List, Optional
 from backend.app.schemas.image_metadata import ImageMetadata
 from backend.app.schemas.task_spec import TaskSpec, TaskType
+
+
+# "a) ... b) ..." -- at least two lettered options.
+CHOICE_OPTIONS = re.compile(r"(?:^|[\s,;:?])a\)\s.*(?:^|[\s,;])b\)\s")
 
 
 class QueryInterpreter:
@@ -38,8 +43,11 @@ class QueryInterpreter:
         is_multimodal_input = has_sar and has_optical and image_count >= 2
 
         # Keywords for intent detection
+        # "between" is deliberately absent: on its own it reads "adjacency between X and Y" or
+        # "an area between 0 and 576000 sqm" as a change request. Every real change query in the
+        # demos and tests also carries "change", "difference" or a similar cue.
         change_keywords = [
-            "change", "difference", "between", "expansion", "growth",
+            "change", "difference", "expansion", "growth",
             "demolition", "new construction", "before and after", "t1", "t2",
             "increased", "decreased", "years", "temporal"
         ]
@@ -55,10 +63,14 @@ class QueryInterpreter:
             "describe", "caption", "scene summary", "overview", "summarize", "scene description"
         ]
 
+        # A question that lists a) b) ... options asks for one of them: it is answered, never
+        # grounded or captioned, even when it says "where is" (e.g. "where is the forest? a) to the left ...").
+        is_choice_question = bool(CHOICE_OPTIONS.search(q_lower))
+
         query_has_change = any(k in q_lower for k in change_keywords)
         query_has_fusion = any(k in q_lower for k in fusion_keywords)
-        is_grounding_query = any(k in q_lower for k in grounding_keywords)
-        is_caption_query = any(k in q_lower for k in caption_keywords)
+        is_grounding_query = any(k in q_lower for k in grounding_keywords) and not is_choice_question
+        is_caption_query = any(k in q_lower for k in caption_keywords) and not is_choice_question
 
         # 1. Compound: fusion_then_change
         # Specifically when query contains both fusion terms AND change terms

@@ -1,0 +1,227 @@
+{
+  "samples": [
+    {
+      "id": "T29UPU_55_58",
+      "patchId": "S2B_MSIL2A_20171112T114339_N9999_R123_T29UPU_55_58",
+      "tile": "T29UPU",
+      "platform": "Sentinel-2B",
+      "acquired": "2017-11-12T11:43:39Z",
+      "country": "Ireland",
+      "season": "Fall",
+      "widthPx": 120,
+      "heightPx": 120,
+      "gsdMeters": 10.0,
+      "crs": "EPSG:32629",
+      "rasterFile": "bigearthnet_T29UPU_55_58.tif",
+      "previewFile": "bigearthnet_T29UPU_55_58.png",
+      "questions": [
+        {
+          "question": "Does the satellite view capture inland waters?",
+          "answer": "no",
+          "type": "binary",
+          "category": "presence"
+        },
+        {
+          "question": "Do pastures cover at least 90% of the image?",
+          "answer": "no",
+          "type": "binary",
+          "category": "area"
+        },
+        {
+          "question": "Does the image show any instance of complex cultivation patterns bordering urban fabrics?",
+          "answer": "no",
+          "type": "binary",
+          "category": "adjacency"
+        },
+        {
+          "question": "Are the distinct continuous areas of arable lands totaling exactly two?",
+          "answer": "no",
+          "type": "binary",
+          "category": "count"
+        },
+        {
+          "question": "How much of the scene do arable lands cover? a) 90 to 100%, b) 30 to 60%, c) 0 to 20%, d) 60 to 80%",
+          "answer": "b",
+          "type": "mcq",
+          "category": "area"
+        }
+      ]
+    },
+    {
+      "id": "T29UPU_38_37",
+      "patchId": "S2B_MSIL2A_20180421T114349_N9999_R123_T29UPU_38_37",
+      "tile": "T29UPU",
+      "platform": "Sentinel-2B",
+      "acquired": "2018-04-21T11:43:49Z",
+      "country": "Ireland",
+      "season": "Spring",
+      "widthPx": 120,
+      "heightPx": 120,
+      "gsdMeters": 10.0,
+      "crs": "EPSG:32629",
+      "rasterFile": "bigearthnet_T29UPU_38_37.tif",
+      "previewFile": "bigearthnet_T29UPU_38_37.png",
+      "questions": [
+        {
+          "question": "Are there regions of broad-leaved forest in the satellite image?",
+          "answer": "no",
+          "type": "binary",
+          "category": "presence"
+        },
+        {
+          "question": "Do parts of the image correspond to arable land?",
+          "answer": "yes",
+          "type": "binary",
+          "category": "presence"
+        },
+        {
+          "question": "From the options below, pick the touching pair: a) Land principally occupied by agriculture, with significant areas of natural vegetation and Urban fabric, b) Pastures and Permanent crops, c) Complex cultivation patterns and Moors, heathland and sclerophyllous vegetation, d) Arable land and Pastures",
+          "answer": "d",
+          "type": "mcq",
+          "category": "adjacency"
+        },
+        {
+          "question": "Would you classify part of this image as urban fabric?",
+          "answer": "no",
+          "type": "binary",
+          "category": "presence"
+        },
+        {
+          "question": "Is the total area of pastures between 0 sqm and 576000 sqm?",
+          "answer": "yes",
+          "type": "binary",
+          "category": "area"
+        }
+      ]
+    },
+    {
+      "id": "T34UEG_28_34",
+      "patchId": "S2A_MSIL2A_20180413T095031_N9999_R079_T34UEG_28_34",
+      "tile": "T34UEG",
+      "platform": "Sentinel-2A",
+      "acquired": "2018-04-13T09:50:31Z",
+      "country": "Lithuania",
+      "season": "Spring",
+      "widthPx": 120,
+      "heightPx": 120,
+      "gsdMeters": 10.0,
+      "crs": "EPSG:32634",
+      "rasterFile": "bigearthnet_T34UEG_28_34.tif",
+      "previewFile": "bigearthnet_T34UEG_28_34.png",
+      "questions": [
+        {
+          "question": "In relation to the arable land, where is the coniferous forest located in the image? a) to the bottom, b) to the right, c) to the left, d) to the top",
+          "answer": "c",
+          "type": "mcq",
+          "category": "relative pos"
+        },
+        {
+          "question": "From the options below, pick the touching pair: a) Arable land and Mixed forest, b) Broad-leaved forest and Coniferous forest, c) Coastal wetlands and Inland waters, d) Arable land and Complex cultivation patterns",
+          "answer": "d",
+          "type": "mcq",
+          "category": "adjacency"
+        },
+        {
+          "question": "Which season is depicted in the image? a) Summer, b) Spring, c) Winter, d) Fall",
+          "answer": "b",
+          "type": "mcq",
+          "category": "season"
+        },
+        {
+          "question": "Identify the classes that border each other: a) Coniferous forest and Industrial or commercial units, b) Broad-leaved forest and Mixed forest, c) Arable land and Mixed forest, d) Broad-leaved forest and Land principally occupied by agriculture, with significant areas of natural vegetation",
+          "answer": "d",
+          "type": "mcq",
+          "category": "adjacency"
+        },
+        {
+          "question": "Would you identify any instance of complex cultivation patterns as lying adjacent to a coniferous forest?",
+          "answer": "no",
+          "type": "binary",
+          "category": "adjacency"
+        },
+        {
+          "question": "Is there direct adjacency between any instance of complex cultivation patterns and land principally occupied by agriculture with significant areas of natural vegetation in the scene?",
+          "answer": "yes",
+          "type": "binary",
+          "category": "adjacency"
+        }
+      ]
+    },
+    {
+      "id": "T34TCR_36_25",
+      "patchId": "S2A_MSIL2A_20170803T094031_N9999_R036_T34TCR_36_25",
+      "tile": "T34TCR",
+      "platform": "Sentinel-2A",
+      "acquired": "2017-08-03T09:40:31Z",
+      "country": "Serbia",
+      "season": "Summer",
+      "widthPx": 120,
+      "heightPx": 120,
+      "gsdMeters": 10.0,
+      "crs": "EPSG:32634",
+      "rasterFile": "bigearthnet_T34TCR_36_25.tif",
+      "previewFile": "bigearthnet_T34TCR_36_25.png",
+      "questions": [
+        {
+          "question": "Is the region of pastures greater than 1152000 square meters?",
+          "answer": "no",
+          "type": "binary",
+          "category": "area"
+        },
+        {
+          "question": "Does this satellite image include transitional woodlands or shrubs?",
+          "answer": "no",
+          "type": "binary",
+          "category": "presence"
+        },
+        {
+          "question": "Does any arable land touch pastures in the image?",
+          "answer": "yes",
+          "type": "binary",
+          "category": "adjacency"
+        },
+        {
+          "question": "How many areas covered by pastures can be seen? a) 4, b) 1, c) 3, d) 2",
+          "answer": "b",
+          "type": "mcq",
+          "category": "count"
+        }
+      ]
+    },
+    {
+      "id": "T29SND_42_38",
+      "patchId": "S2A_MSIL2A_20171121T112351_N9999_R037_T29SND_42_38",
+      "tile": "T29SND",
+      "platform": "Sentinel-2A",
+      "acquired": "2017-11-21T11:23:51Z",
+      "country": "Portugal",
+      "season": "Fall",
+      "widthPx": 120,
+      "heightPx": 120,
+      "gsdMeters": 10.0,
+      "crs": "EPSG:32629",
+      "rasterFile": "bigearthnet_T29SND_42_38.tif",
+      "previewFile": "bigearthnet_T29SND_42_38.png",
+      "questions": [
+        {
+          "question": "Does any mixed forest meet transitional woodlands or shrubs at its edges in the image?",
+          "answer": "no",
+          "type": "binary",
+          "category": "adjacency"
+        },
+        {
+          "question": "Does the satellite image display urban fabric?",
+          "answer": "no",
+          "type": "binary",
+          "category": "presence"
+        },
+        {
+          "question": "How much of the image do broad-leaved forests cover? a) 10 to 30%, b) 30 to 40%, c) 40 to 80%, d) 0 to 10%",
+          "answer": "c",
+          "type": "mcq",
+          "category": "area"
+        }
+      ]
+    }
+  ]
+}

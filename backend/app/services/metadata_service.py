@@ -9,6 +9,8 @@ The previous implementation gave every .tif the CRS "EPSG:32643", every optical 
 cloud cover of exactly 12%, and a GSD guessed from the filename, which is why the CRS
 and footprint-overlap preconditions could never fire on real input.
 """
+import base64
+import io
 import math
 import re
 import warnings
@@ -17,6 +19,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from backend.app.schemas.image_metadata import ImageMetadata
+
+# Largest side, in pixels, of the display preview returned by render_preview.
+PREVIEW_MAX_SIDE = 512
 
 # Largest side, in pixels, of the decimated read used for NoData and cloud statistics.
 # Statistics over a decimated read are estimates, which is all a warning threshold needs.
@@ -197,6 +202,65 @@ class MetadataService:
             # heuristics and leave everything unknown as None; never fabricate values.
             pass
         return metadata
+
+    def render_preview(self, file_path: str, max_side: int = PREVIEW_MAX_SIDE) -> Optional[str]:
+        """A PNG data URI of the image for display, or None when it cannot be decoded.
+
+        Browsers cannot display a TIFF, so the upload card shows this instead of the raw
+        file. Pillow handles 8-bit images; anything else (16-bit or float rasters) goes
+        through rasterio with a 2-98 percentile stretch per band. For display only: the
+        analysis always reads the original file.
+        """
+        image = self._preview_with_pillow(file_path)
+        if image is None:
+            image = self._preview_with_rasterio(file_path)
+        if image is None:
+            return None
+        image.thumbnail((max_side, max_side))
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+
+    @staticmethod
+    def _preview_with_pillow(file_path: str):
+        from PIL import Image
+
+        try:
+            with Image.open(file_path) as src:
+                src.load()
+                if src.mode not in ("RGB", "RGBA", "L", "LA", "P"):
+                    return None  # 16-bit or float: needs a stretch, not a cast
+                return src.convert("RGB")
+        except Exception:
+            return None
+
+    @staticmethod
+    def _preview_with_rasterio(file_path: str):
+        import numpy as np
+        import rasterio
+        from PIL import Image
+        from rasterio.errors import NotGeoreferencedWarning
+
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", NotGeoreferencedWarning)
+                with rasterio.open(file_path) as src:
+                    scale = max(src.width, src.height) / PREVIEW_MAX_SIDE
+                    shape = (max(1, int(src.height / max(scale, 1))), max(1, int(src.width / max(scale, 1))))
+                    bands = [1, 2, 3] if src.count >= 3 else [1]
+                    data = src.read(bands, out_shape=(len(bands), *shape)).astype("float64")
+        except Exception:
+            return None
+        channels = []
+        for band in data:
+            finite = band[np.isfinite(band)]
+            if finite.size == 0:
+                return None
+            low, high = np.percentile(finite, (2, 98))
+            span = high - low if high > low else 1.0
+            channels.append((np.clip((band - low) / span, 0, 1) * 255).astype("uint8"))
+        stacked = np.stack(channels * 3 if len(channels) == 1 else channels, axis=-1)
+        return Image.fromarray(stacked, mode="RGB")
 
     def _read_raster(self, metadata: ImageMetadata, file_path: str) -> None:
         import rasterio

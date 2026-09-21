@@ -1,17 +1,26 @@
 import React from 'react';
 import { useSatQuery } from '../context/SatQueryContext';
+import { sampleDate } from '../data/realSample';
 import { MessageSquare, Sparkles, X } from 'lucide-react';
 
 export const QueryInput: React.FC = () => {
-  const { query, setQuery } = useSatQuery();
+  const { query, setQuery, activeRealSample } = useSatQuery();
+  const realSampleActive = activeRealSample !== null;
 
-  const representativeQueries = [
+  const isoQueries = [
     'Describe the land-cover and major objects visible in this image.',
     'Highlight the water body referred to in the query.',
     'What changed between these two dates, and where did the change occur?',
     'Use the optical and SAR images together to identify built-up and water-covered regions.',
     'Has the built-up area increased, decreased, or remained unchanged?'
   ];
+
+  // With the real BigEarthNet sample loaded, offer its own questions: they have reference
+  // answers, and they are the only format the trained adapter was taught.
+  const representativeQueries = activeRealSample ? activeRealSample.questions.map((q) => q.question) : isoQueries;
+  const accent = realSampleActive ? 'var(--emerald-success)' : 'var(--cyan-primary)';
+  const accentBg = realSampleActive ? 'rgba(5, 150, 105, 0.12)' : 'rgba(2, 132, 199, 0.12)';
+  const accentBorder = realSampleActive ? '1px solid rgba(5, 150, 105, 0.5)' : '1px solid rgba(2, 132, 199, 0.4)';
 
   return (
     <div style={{ marginBottom: 20 }}>
@@ -93,8 +102,12 @@ export const QueryInput: React.FC = () => {
           color: 'var(--text-muted)',
           marginBottom: 6
         }}>
-          <Sparkles size={11} color="var(--indigo-primary)" />
-          <span>ISRO Representative Queries (Click to use):</span>
+          <Sparkles size={11} color={realSampleActive ? 'var(--emerald-success)' : 'var(--indigo-primary)'} />
+          <span>
+            {realSampleActive
+              ? "BigEarthNet's questions for this image, answered by the trained model (Click to use):"
+              : 'ISRO Representative Queries (Click to use):'}
+          </span>
         </div>
 
         <div style={{
@@ -107,9 +120,9 @@ export const QueryInput: React.FC = () => {
               key={idx}
               onClick={() => setQuery(q)}
               style={{
-                background: query === q ? 'rgba(2, 132, 199, 0.12)' : 'var(--bg-elevated)',
-                border: query === q ? '1px solid rgba(2, 132, 199, 0.4)' : '1px solid var(--border-subtle)',
-                color: query === q ? 'var(--cyan-primary)' : 'var(--text-secondary)',
+                background: query === q ? accentBg : 'var(--bg-elevated)',
+                border: query === q ? accentBorder : '1px solid var(--border-subtle)',
+                color: query === q ? accent : 'var(--text-secondary)',
                 borderRadius: 'var(--radius-full)',
                 padding: '4px 12px',
                 fontSize: 11,
@@ -122,6 +135,15 @@ export const QueryInput: React.FC = () => {
             </button>
           ))}
         </div>
+
+        {activeRealSample && (
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0 0', lineHeight: 1.45 }}>
+            Real Sentinel-2 image ({activeRealSample.country}, {sampleDate(activeRealSample)}); tile {activeRealSample.tile} was
+            never seen in training. These images were chosen because the model answers their questions well. Across all unseen
+            tiles it scores about 33% on multiple choice (chance 25%) and 50% on yes/no, so treat one image as a
+            sample, not as its accuracy.
+          </p>
+        )}
       </div>
     </div>
   );

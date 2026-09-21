@@ -38,6 +38,14 @@ describe('resolveAssetUrl', () => {
     expect(resolveAssetUrl('https://cdn.example/a.png')).toBe('https://cdn.example/a.png');
   });
 
+  it('sends only backend paths to the API and keeps the frontend’s own assets same-origin', async () => {
+    const { API_BASE, resolveAssetUrl } = await loadApi();
+    expect(resolveAssetUrl('/storage/sessions/sq-1/evidence/o.png')).toBe(`${API_BASE}/storage/sessions/sq-1/evidence/o.png`);
+    expect(resolveAssetUrl('/v1/session/sq-1/report?format=pdf')).toBe(`${API_BASE}/v1/session/sq-1/report?format=pdf`);
+    // The live-model sample image is served by Vite, not the API; prefixing it gave a 404 (seen in a browser).
+    expect(resolveAssetUrl('/real/bigearthnet_T29UPU_55_58.png')).toBe('/real/bigearthnet_T29UPU_55_58.png');
+  });
+
   it('returns an empty string for a missing URL', async () => {
     const { resolveAssetUrl } = await loadApi();
     expect(resolveAssetUrl(null)).toBe('');

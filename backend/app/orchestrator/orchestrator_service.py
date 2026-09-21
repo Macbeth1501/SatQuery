@@ -82,7 +82,7 @@ class OrchestratorService:
             return response
 
         # Step 3: Specialist Routing & Execution
-        items, answer_text, boxes, region_tags = await self.specialist_router.route_and_execute(
+        items, answer_text, boxes, region_tags, model_result = await self.specialist_router.route_and_execute(
             task_spec, images, session_id, trace=trace
         )
 
@@ -114,7 +114,11 @@ class OrchestratorService:
         trace.add_step(
             component="ConfidenceScorer",
             adapter_id="bayesian_confidence_scorer_v1.0",
-            output_summary="Calculated confidence tier based on verifier flags, sensor parameters, and scenario calibration",
+            output_summary=(
+                "Calculated confidence tier from the trained adapter's answer probability"
+                if model_result is not None
+                else "Calculated confidence tier based on verifier flags, sensor parameters, and scenario calibration"
+            ),
         )
         confidence = self.confidence_scorer.compute(
             task_spec=task_spec,
@@ -123,6 +127,7 @@ class OrchestratorService:
             agreement_ok=agreement_ok,
             quantity_discrepancy=qty_discrepancy,
             verifier_rationale=verifier_rationale,
+            model_result=model_result,
         )
 
         # Step 7: Response Assembly

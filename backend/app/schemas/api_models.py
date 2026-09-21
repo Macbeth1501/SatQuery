@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional
 from backend.app.schemas.base import CamelModel
 from backend.app.schemas.evidence import BoundingBox, RegionTag
 from backend.app.schemas.execution_trace import ExecutionTrace
+from backend.app.schemas.image_metadata import ImageMetadata
 from backend.app.schemas.task_spec import TaskSpec
 from backend.app.schemas.validation import ValidationRejection
 
@@ -41,3 +42,10 @@ class AnalyzeResponse(CamelModel):
     rejection_reason: Optional[str] = None
     rejection_details: Optional[ValidationRejection] = None
     task_spec: Optional[TaskSpec] = None
+
+
+class InspectResponse(CamelModel):
+    """What `POST /v1/inspect` reads from one uploaded file, before any analysis runs."""
+    metadata: ImageMetadata
+    # PNG data URI for display; None when the file cannot be decoded as an image.
+    preview_data_url: Optional[str] = None

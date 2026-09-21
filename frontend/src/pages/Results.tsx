@@ -8,11 +8,12 @@ import { ExecutionTrace } from '../components/ExecutionTrace';
 import { ReportDownload } from '../components/ReportDownload';
 import { RejectionState } from '../components/RejectionState';
 import { ResultSourceBadge } from '../components/ResultSourceBadge';
+import { ReferenceCheck } from '../components/ReferenceCheck';
 import { getSession, SessionNotFoundError } from '../services/api';
 import { ArrowLeft, Layers, Loader2, SearchX } from 'lucide-react';
 
 export const Results: React.FC = () => {
-  const { results, query, image1, image2, resultSource, openSession } = useSatQuery();
+  const { results, query, image1, image2, resultSource, openSession, activeRealSample } = useSatQuery();
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
   const [load, setLoad] = useState<'idle' | 'loading' | 'notFound' | 'error'>('idle');
@@ -208,6 +209,11 @@ export const Results: React.FC = () => {
             query={query}
             taskType={results.executionTrace.selectedTaskType}
           />
+
+          {/* Real sample only: the answer graded against BigEarthNet's reference */}
+          {activeRealSample && resultSource === 'live' && (
+            <ReferenceCheck sample={activeRealSample} query={query} answerText={results.answerText || ''} />
+          )}
 
           {/* Interactive Evidence Canvas */}
           <EvidenceViewer

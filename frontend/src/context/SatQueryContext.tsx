@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState } from 'react';
 import type { ImageMetadata, AnalyzeResponse, DemoScenario } from '../types/satquery';
 import { DEMO_SCENARIOS } from '../data/mockScenarios';
+import { findSample, realSampleImage, type RealSample } from '../data/realSample';
 import { analyzeRaster } from '../services/api';
 
 /** Where the displayed result actually came from. */
@@ -59,6 +60,25 @@ async function fetchRasterFile(url: string | undefined, filename: string): Promi
   }
 }
 
+/** A readable reason for a failed analyze call: the backend's own `detail` when it sent one. */
+function describeFailure(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  const api = /^API error \((\d+)\): ([\s\S]*)$/.exec(message);
+  if (api) {
+    let detail = api[2];
+    try {
+      const body = JSON.parse(api[2]);
+      if (typeof body?.detail === 'string') detail = body.detail;
+    } catch {
+      // not JSON; keep the raw text
+    }
+    return api[1] === '503'
+      ? `The model server is not running. ${detail}`
+      : `The backend returned HTTP ${api[1]}: ${detail}`;
+  }
+  return `The backend could not be reached (${message}). Start it with: uvicorn backend.app.main:app --port 8000`;
+}
+
 export interface ProcessingStepInfo {
   index: number;
   label: string;
@@ -105,6 +125,14 @@ interface SatQueryContextType {
   setImage2: (img: ImageMetadata | null) => void;
   setQuery: (q: string) => void;
   loadScenario: (scenarioId: string) => void;
+  /** The real BigEarthNet sample loaded as image 1, or null: its answers come from the trained
+   *  adapter, and a failed call shows an error instead of falling back to demo data. */
+  activeRealSample: RealSample | null;
+  /** Loads a real BigEarthNet sample by id, optionally with one of its questions. `file` is the sample
+   *  uploaded by hand; its own bytes are then sent instead of fetching the bundled copy. */
+  loadRealSample: (sampleId: string, question?: string, file?: File) => void;
+  /** Why the last analysis produced no result; set only on the real-sample path. */
+  analysisError: string | null;
   startAnalysis: (onComplete?: () => void) => void;
   resetSession: () => void;
   toggleLayer: (layer: 'boxes' | 'masks' | 'regions') => void;
@@ -126,6 +154,8 @@ export const SatQueryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [activeStep, setActiveStep] = useState<number>(0);
   const [results, setResults] = useState<AnalyzeResponse | null>(null);
   const [resultSource, setResultSource] = useState<ResultSource | null>(null);
+  const [realSampleId, setRealSampleId] = useState<string | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [activeLayers, setActiveLayers] = useState({
     boxes: true,
     masks: true,
@@ -154,6 +184,8 @@ export const SatQueryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!scenario) return;
 
     setActiveScenario(scenario);
+    setRealSampleId(null);
+    setAnalysisError(null);
     setQuery(scenario.query);
 
     const img1 = scenario.images.find((i) => i.slot === 1)?.metadata || null;
@@ -167,6 +199,33 @@ export const SatQueryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setResultSource(null);
   };
 
+  const loadRealSample = (sampleId: string, question?: string, file?: File) => {
+    const sample = findSample(sampleId);
+    if (!sample) return;
+    setActiveScenario(null);
+    setRealSampleId(sample.id);
+    setAnalysisError(null);
+    setFile1(file ?? null);
+    setImage1(realSampleImage(sample, file?.name));
+    // A hand upload fills slot 1 only; the preset starts a clean single-image session.
+    if (!file) {
+      setFile2(null);
+      setImage2(null);
+    }
+    // A hand upload keeps whatever the user already typed; the preset seeds its first question.
+    if (question !== undefined || !file) setQuery(question ?? sample.questions[0].question);
+    setResults(null);
+    setResultSource(null);
+  };
+
+  // The sample stays active only while its image is the one loaded; replacing the image
+  // (an upload or a scenario) ends it.
+  const loadedSample = findSample(realSampleId);
+  const activeRealSample =
+    loadedSample && (image1?.name === loadedSample.rasterFile || image1?.name === loadedSample.previewFile)
+      ? loadedSample
+      : null;
+
   const toggleLayer = (layer: 'boxes' | 'masks' | 'regions') => {
     setActiveLayers((prev) => ({ ...prev, [layer]: !prev[layer] }));
   };
@@ -178,6 +237,8 @@ export const SatQueryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setImage2(null);
     setQuery('');
     setActiveScenario(null);
+    setRealSampleId(null);
+    setAnalysisError(null);
     setResults(null);
     setResultSource(null);
     setActiveStep(0);
@@ -192,6 +253,8 @@ export const SatQueryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setImage1(null);
     setImage2(null);
     setActiveScenario(null);
+    setRealSampleId(null);
+    setAnalysisError(null);
     setQuery(res.taskSpec?.questionText ?? '');
     setResults(res);
     setResultSource('live');
@@ -200,6 +263,7 @@ export const SatQueryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const startAnalysis = async (onComplete?: () => void) => {
     setIsAnalyzing(true);
     setActiveStep(1);
+    setAnalysisError(null);
 
     // Animate pipeline progress
     let currentStep = 1;
@@ -221,8 +285,9 @@ export const SatQueryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         file: File | null,
         meta: ImageMetadata | null
       ): Promise<File | null> => {
-        if (file) return file;
+        // An empty slot sends nothing, even if a stale File survived in state.
         if (!meta) return null;
+        if (file) return file;
         // Prefer the scenario's georeferenced GeoTIFF: the backend then reads real CRS, GSD,
         // footprint and timestamps from it. The SVG preview stays the on-screen picture.
         const georeferenced = await fetchRasterFile(meta.rasterUrl, meta.name);
@@ -243,6 +308,16 @@ export const SatQueryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       targetResponse = await analyzeRaster(query, files);
     } catch (err) {
+      // The real sample exists to show the trained model answering. A canned answer here would
+      // look identical to a real one, so show why there is no answer instead.
+      if (activeRealSample) {
+        clearInterval(interval);
+        console.error('Live model call failed:', err);
+        setAnalysisError(describeFailure(err));
+        setIsAnalyzing(false);
+        setActiveStep(0);
+        return;
+      }
       console.warn('Live backend call unfulfilled, falling back to client-side scenario:', err);
       source = 'demo';
       if (activeScenario) {
@@ -293,6 +368,9 @@ export const SatQueryProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setImage2,
         setQuery,
         loadScenario,
+        activeRealSample,
+        loadRealSample,
+        analysisError,
         startAnalysis,
         resetSession,
         toggleLayer,

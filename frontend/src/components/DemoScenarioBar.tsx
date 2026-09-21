@@ -1,10 +1,21 @@
 import React from 'react';
 import { DEMO_SCENARIOS } from '../data/mockScenarios';
+import { REAL_SAMPLES, sampleDate } from '../data/realSample';
 import { useSatQuery } from '../context/SatQueryContext';
-import { Play, Sparkles } from 'lucide-react';
+import { Cpu, Play, Sparkles } from 'lucide-react';
+
+const rowLabel: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  fontSize: 11,
+  fontWeight: 600,
+  color: 'rgba(226, 232, 240, 0.85)',
+  margin: '0 0 8px'
+};
 
 export const DemoScenarioBar: React.FC = () => {
-  const { activeScenario, loadScenario } = useSatQuery();
+  const { activeScenario, loadScenario, activeRealSample, loadRealSample } = useSatQuery();
 
   return (
     <div style={{
@@ -46,10 +57,74 @@ export const DemoScenarioBar: React.FC = () => {
         </div>
 
         <span className="badge badge-cyan" style={{ fontSize: 10 }}>
-          Deterministic Demo Engine
+          Demo Engine + Live Model
         </span>
       </div>
 
+      {/* Live model: the trained adapter on real BigEarthNet images */}
+      <p style={rowLabel}>
+        <Cpu size={12} color="var(--emerald-success)" />
+        Live model — real BigEarthNet Sentinel-2 images, answered by the trained LoRA (tiles never seen in training)
+      </p>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+        gap: 10,
+        marginBottom: 14
+      }}>
+        {REAL_SAMPLES.map((sample) => {
+          const isSelected = activeRealSample?.id === sample.id;
+          return (
+            <button
+              key={sample.id}
+              onClick={() => loadRealSample(sample.id)}
+              aria-pressed={isSelected}
+              aria-label={`Live model: ${sample.country}, ${sampleDate(sample)}`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '8px 10px',
+                borderRadius: 'var(--radius-md)',
+                background: isSelected ? 'rgba(209, 250, 229, 0.96)' : 'var(--bg-elevated)',
+                border: isSelected ? '2px solid var(--emerald-success)' : '1px solid var(--emerald-success)',
+                textAlign: 'left',
+                boxShadow: isSelected ? 'var(--shadow-sm)' : 'none',
+                transition: 'all 0.2s ease',
+                cursor: 'pointer'
+              }}
+            >
+              <img
+                src={`/real/${sample.previewFile}`}
+                alt=""
+                width={40}
+                height={40}
+                style={{ imageRendering: 'pixelated', borderRadius: 4, flexShrink: 0 }}
+              />
+              <span style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  color: 'var(--emerald-success)'
+                }}>
+                  Live model · {sample.country}
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: isSelected ? '#065f46' : 'var(--text-primary)', lineHeight: 1.3 }}>
+                  {sampleDate(sample)} · {sample.questions.length} questions
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Demo engine scenarios */}
+      <p style={rowLabel}>
+        <Play size={11} color="var(--cyan-primary)" />
+        Demo engine — scripted scenarios for every capability (no model)
+      </p>
       {/* Scenario buttons */}
       <div style={{
         display: 'grid',

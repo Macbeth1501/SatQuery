@@ -1,4 +1,4 @@
-import type { AnalyzeResponse } from '../types/satquery';
+import type { AnalyzeResponse, InspectResponse } from '../types/satquery';
 
 /**
  * Base URL of the SatQuery API. Set VITE_API_BASE_URL at build or dev time to point
@@ -9,11 +9,13 @@ export const API_BASE: string = (
   import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 ).replace(/\/+$/, '');
 
-/** Resolves a backend-relative asset path (e.g. /storage/...) to an absolute URL.
- *  Data URIs and absolute URLs from the demo scenarios are returned untouched. */
+/** Resolves a backend-relative asset path (/storage/... or /v1/...) to an absolute URL.
+ *  Data URIs, absolute URLs and the frontend's own static assets (e.g. /real/..., served by
+ *  this origin, not the API) are returned untouched. */
 export function resolveAssetUrl(url: string | undefined | null): string {
   if (!url) return '';
   if (/^(https?:|data:|blob:)/.test(url)) return url;
+  if (!/^\/?(storage|v1)\//.test(url)) return url;
   return `${API_BASE}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
@@ -43,6 +45,17 @@ export async function analyzeRaster(
     throw new Error(`API error (${response.status}): ${errText}`);
   }
 
+  return response.json();
+}
+
+/** Reads one file's real metadata and a displayable preview, without running an analysis. */
+export async function inspectRaster(file: File): Promise<InspectResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetch(`${API_BASE}/v1/inspect`, { method: 'POST', body: formData });
+  if (!response.ok) {
+    throw new Error(`API error (${response.status}): ${await response.text()}`);
+  }
   return response.json();
 }
 

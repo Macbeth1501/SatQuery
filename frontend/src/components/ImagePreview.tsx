@@ -17,6 +17,8 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
   onReplace
 }) => {
   const isSar = metadata.detectedModality === 'sar';
+  // A user upload whose facts the backend is still reading (POST /v1/inspect).
+  const reading = metadata.metadataStatus === 'reading';
 
   return (
     <div style={{
@@ -160,28 +162,28 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)' }}>
             <Compass size={12} color="var(--cyan-primary)" />
             <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)' }}>
-              {metadata.crs ? metadata.crs.split(' ')[0] : 'Unprojected'}
+              {reading ? 'Reading file…' : metadata.crs ? metadata.crs.split(' ')[0] : 'No CRS'}
             </span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)' }}>
             <Radio size={12} color="var(--indigo-primary)" />
             <span style={{ fontSize: 10 }}>
-              GSD: {metadata.gsdMeters ? `${metadata.gsdMeters}m` : 'N/A'}
+              GSD: {reading ? '…' : metadata.gsdMeters ? `${metadata.gsdMeters}m` : 'unknown'}
             </span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)' }}>
             <Layers size={12} color="var(--emerald-success)" />
             <span style={{ fontSize: 10 }}>
-              {metadata.bandCount} Bands
+              {reading ? '… Bands' : `${metadata.bandCount} Bands`}
             </span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)' }}>
             <Calendar size={12} color="var(--amber-warning)" />
             <span style={{ fontSize: 10 }}>
-              {metadata.acquisitionTimestamp ? metadata.acquisitionTimestamp.split('T')[0] : 'Current'}
+              {reading ? '…' : metadata.acquisitionTimestamp ? metadata.acquisitionTimestamp.split('T')[0] : 'Date unknown'}
             </span>
           </div>
         </div>

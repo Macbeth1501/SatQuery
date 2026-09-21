@@ -1,48 +1,100 @@
 import React, { useRef } from 'react';
 import { useSatQuery } from '../context/SatQueryContext';
+import { findSampleByFile } from '../data/realSample';
+import { inspectRaster } from '../services/api';
 import { ImagePreview } from './ImagePreview';
 import type { ImageMetadata, ImageFormat, Modality } from '../types/satquery';
 import { Upload, Plus } from 'lucide-react';
 
 export const ImageUploader: React.FC = () => {
-  const { image1, image2, setImage1, setImage2, setFile1, setFile2 } = useSatQuery();
+  const { image1, image2, setImage1, setImage2, setFile1, setFile2, loadRealSample } = useSatQuery();
   const fileInputRef1 = useRef<HTMLInputElement>(null);
   const fileInputRef2 = useRef<HTMLInputElement>(null);
 
-  // Helper to construct ImageMetadata from user file upload
+  // Each slot's latest upload; an inspect reply for an older file is ignored.
+  const latestUpload = useRef<Record<1 | 2, string>>({ 1: '', 2: '' });
+  const uploadCount = useRef(0);
+
+  /**
+   * Shows an uploaded file at once, then fills in what the file itself says, read by the backend
+   * (POST /v1/inspect): CRS, GSD, bands, acquisition time, modality, and a preview a browser can
+   * display even for a TIFF. Until then, and if the backend cannot be reached, those fields are
+   * shown as unknown -- never guessed.
+   */
   const handleFileUpload = (file: File, slot: 1 | 2) => {
+    // A live-model sample (frontend/public/real/) uploaded by hand: use its known facts and PNG
+    // preview, and switch on its questions.
+    const sample = slot === 1 ? findSampleByFile(file.name) : null;
+    if (sample) {
+      latestUpload.current[1] = '';
+      loadRealSample(sample.id, undefined, file);
+      return;
+    }
+
     const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
     const isTiff = ext === 'tif' || ext === 'tiff';
     const format: ImageFormat = isTiff ? 'geotiff' : (ext === 'jpeg' || ext === 'jpg' ? 'jpeg' : 'png');
-    
-    // Guess modality from filename or default to optical
+    // Provisional until the backend reads the file: the capability matrix needs a modality now.
     const lowerName = file.name.toLowerCase();
     const detectedModality: Modality = lowerName.includes('sar') || lowerName.includes('s1') || lowerName.includes('risat')
       ? 'sar'
       : 'optical';
 
-    const newMetadata: ImageMetadata = {
-      imageId: `upload_${Date.now()}_slot${slot}`,
+    uploadCount.current += 1;
+    const imageId = `upload_${uploadCount.current}_slot${slot}`;
+    const provisional: ImageMetadata = {
+      imageId,
       name: file.name,
       format,
-      crs: isTiff ? 'EPSG:32643 (UTM 43N)' : 'Local Pixel Grid',
-      bandCount: detectedModality === 'sar' ? 2 : 4,
+      crs: null,
+      bandCount: 0,
       detectedModality,
-      gsdMeters: detectedModality === 'sar' ? 1.0 : 0.65,
-      acquisitionTimestamp: new Date().toISOString(),
-      nodataPercent: 0.0,
-      cloudMaskPercent: 0.0,
-      previewUrl: URL.createObjectURL(file)
+      gsdMeters: null,
+      acquisitionTimestamp: null,
+      nodataPercent: 0,
+      cloudMaskPercent: null,
+      previewUrl: URL.createObjectURL(file),
+      metadataStatus: 'reading',
     };
 
-    if (slot === 1) {
-      setFile1(file);
-      setImage1(newMetadata);
-    } else {
-      setFile2(file);
-      setImage2(newMetadata);
-    }
+    const setImage = slot === 1 ? setImage1 : setImage2;
+    latestUpload.current[slot] = imageId;
+    (slot === 1 ? setFile1 : setFile2)(file);
+    setImage(provisional);
+
+    inspectRaster(file)
+      .then(({ metadata, previewDataUrl }) => {
+        if (latestUpload.current[slot] !== imageId) return;
+        // The backend's PNG replaces the blob preview, so the blob can be released.
+        if (previewDataUrl) URL.revokeObjectURL(provisional.previewUrl);
+        setImage({
+          ...metadata,
+          imageId,
+          name: file.name,
+          previewUrl: previewDataUrl ?? provisional.previewUrl,
+          metadataStatus: 'read',
+        });
+      })
+      .catch(() => {
+        if (latestUpload.current[slot] !== imageId) return;
+        setImage({ ...provisional, metadataStatus: 'unavailable' });
+      });
   };
+
+  const removeImage = (slot: 1 | 2) => {
+    latestUpload.current[slot] = '';
+    (slot === 1 ? setFile1 : setFile2)(null);
+    (slot === 1 ? setImage1 : setImage2)(null);
+  };
+
+  const dropProps = (slot: 1 | 2) => ({
+    onDragOver: (e: React.DragEvent) => e.preventDefault(),
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      const file = e.dataTransfer.files?.[0];
+      if (file) handleFileUpload(file, slot);
+    },
+  });
 
   return (
     <div style={{
@@ -59,6 +111,7 @@ export const ImageUploader: React.FC = () => {
         accept=".tif,.tiff,.png,.jpg,.jpeg"
         onChange={(e) => {
           if (e.target.files?.[0]) handleFileUpload(e.target.files[0], 1);
+          e.target.value = ''; // so picking the same file again still fires onChange
         }}
       />
       <input
@@ -68,6 +121,7 @@ export const ImageUploader: React.FC = () => {
         accept=".tif,.tiff,.png,.jpg,.jpeg"
         onChange={(e) => {
           if (e.target.files?.[0]) handleFileUpload(e.target.files[0], 2);
+          e.target.value = '';
         }}
       />
 
@@ -77,12 +131,13 @@ export const ImageUploader: React.FC = () => {
           <ImagePreview
             metadata={image1}
             slotLabel="Image 1 (Primary / T1 / Optical)"
-            onRemove={() => setImage1(null)}
+            onRemove={() => removeImage(1)}
             onReplace={() => fileInputRef1.current?.click()}
           />
         ) : (
           <div
             onClick={() => fileInputRef1.current?.click()}
+            {...dropProps(1)}
             style={{
               height: '100%',
               minHeight: 280,
@@ -128,12 +183,13 @@ export const ImageUploader: React.FC = () => {
           <ImagePreview
             metadata={image2}
             slotLabel="Image 2 (Secondary / T2 / SAR)"
-            onRemove={() => setImage2(null)}
+            onRemove={() => removeImage(2)}
             onReplace={() => fileInputRef2.current?.click()}
           />
         ) : (
           <div
             onClick={() => fileInputRef2.current?.click()}
+            {...dropProps(2)}
             style={{
               height: '100%',
               minHeight: 280,

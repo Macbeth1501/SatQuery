@@ -66,6 +66,19 @@ export interface ImageMetadata {
    * uploads in place of its rasterized preview, so the backend reads real metadata from it.
    */
   rasterUrl?: string;
+  /**
+   * Frontend-only, never sent by the API: for a user upload, whether its facts have been read by
+   * POST /v1/inspect yet. 'reading' shows placeholders; 'unavailable' means the backend could not be
+   * asked, so the unknown fields stay unknown rather than guessed.
+   */
+  metadataStatus?: 'reading' | 'read' | 'unavailable';
+}
+
+/** POST /v1/inspect: what the backend reads from one uploaded file before any analysis. */
+export interface InspectResponse {
+  metadata: ImageMetadata;
+  /** PNG data URI for display (browsers cannot show a TIFF); null when the file cannot be decoded. */
+  previewDataUrl: string | null;
 }
 
 export interface TaskSpec {

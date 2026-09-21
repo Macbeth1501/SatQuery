@@ -9,10 +9,11 @@ the log is wrong and must be corrected.
 ## Current status
 
 **Phase: prototype complete and verified, Phases 0-8 all closed. The full pipeline
-runs end to end on deterministic dummy specialists. No machine-learning model is
-integrated yet. Track A (hardening) is done except A6, which is now unblocked; the two
-decisions that gated real-model integration (D1 backbone, D2 compute) are closed, so Track B/C
-is unblocked but unstarted (see "Next step").**
+runs end to end on deterministic dummy specialists, with one exception added 2026-09-21: with
+`SATQUERY_VQA_MODEL_URL` set, single-image questions are answered by the trained run-2 LoRA adapter served by
+`ml/serve_vqa.py`, and the website offers five real BigEarthNet patches with 23 reference-graded questions as
+live-model presets (C0 and C2 PARTIAL). Uploads are read by `POST /v1/inspect`; nothing is invented on screen.
+Grounding, change and fusion are still dummies. Track A (hardening) is done except A6 (see "Next step").**
 
 The system is a high-fidelity facade, and deliberately so — the Development Plan
 (§2.5) requires that dummy specialists expose exactly the interface the real ones
@@ -34,12 +35,13 @@ inference layer is stubbed.
 | Pillow bounding-box and change-mask overlays | Complete |
 | Session persistence | Complete — SQLite (see the datastore row below); legacy `response.json` files are imported on first read |
 | React frontend, 3 routes, 15 components | Complete, verified in-browser |
-| Test suite: 158 pytest + 58 Vitest tests | All passing (18 in `tests/test_ml.py`, which skip when scikit-learn, scipy or torch are missing) |
+| Test suite: 195 pytest + 72 Vitest tests | All passing (21 in `tests/test_ml.py`, some of which skip when scikit-learn, scipy or torch are missing; `tests/test_real_model.py` and `tests/test_inspect.py` need no GPU) |
 | Demo inputs | Seven georeferenced GeoTIFFs in `frontend/public/demo/` (scenarios A, C, D, E, and G which reuses C's pair reversed); B and F stay plain PNGs on purpose. Georeferencing is real, the pictures are synthetic |
 | ML training side (`ml/`) | B1 thin slice built and verified; B5 LoRA train/eval/notebook written; baseline evaluated; **run 1 (old leaky slice, `data/b5_run1/adapter_final`) showed no evidence of image reading; run 2 (leak-neutral `data/b1_v2`, 300 steps in 1 h 43 min, `data/b5_run2/adapter_final`) passes the pre-registered test on `bench_hard` main (+6.1 binary, +8.6 mcq over text-only) but its binary lead is gone on held-out tiles (held-out mcq keeps +8.6)**. Not wired into the backend. `tests/test_ml.py` (18 tests) covers the CPU-side pieces (option parser, text-only baseline, raking, sampler, McNemar, answer parser, change rate, resumable training state on a toy model); training, extraction and GPU evaluation have no automated tests |
-| **Specialist inference** | **Dummy — `ScenarioEngine` lookup, no model** |
+| **Specialist inference** | **Dummy — `ScenarioEngine` lookup — except single-image VQA/captioning when `SATQUERY_VQA_MODEL_URL` is set: real adapter over HTTP (`ml/serve_vqa.py`), verified live 2026-09-21** |
+| Live-model demo | Green row of the preset bar on `/analyze`: five real BigEarthNet Sentinel-2 patches (Ireland ×2, Lithuania, Serbia, Portugal; tiles never seen in training), 23 questions, 23 of 23 correct in the browser, 2 rated Medium and 21 Low. A card, or uploading the file by hand, loads the GeoTIFF into Image 1 and the query chips become its questions. The first patch (tile unseen in training) and its 5 BigEarthNet questions, graded against the reference answer on the Results page. All 5 are answered correctly; the probabilities are 78%, 51%, 50%, 51% and 34% |
 | **Optical/SAR fusion** | **Dummy — hardcoded region tags** |
-| Raster metadata extraction | Read from the file (CRS, bands, GSD, footprint, NoData, timestamp) |
+| Raster metadata extraction | Read from the file (CRS, bands, GSD, footprint, NoData, timestamp). Also exposed before analysis as `POST /v1/inspect`, which fills the upload card and renders a PNG preview (TIFFs included) |
 | Externalized configuration | `SATQUERY_*` env vars and `VITE_API_BASE_URL` |
 | Persistent datastore | SQLite (`sessions`, `evidence_ledgers`, `execution_traces`); survives restart |
 | Containers, Compose, CI workflow | Complete (Track D) — both images build and the stack runs an analyze cycle in CI |
@@ -66,12 +68,22 @@ fusion query, returning HTTP 200 with a full trace rather than an error.
 
 ## Next step
 
+**Newest (2026-09-21): five live-model samples; upload metadata read from the file** (newest History entry). Demo-ready:
+follow `docs/STARTUP_GUIDE.md` §3a. Suggested next steps, none started: the security items in `docs/AUDIT_REPORT.md`
+(1.1-1.3) before any non-local use; a full-epoch retrain; the rest of C0/C2.
+
+**Earlier (2026-09-21): live-model website demo built and verified over HTTP.**
+Run it with `docs/STARTUP_GUIDE.md` §3a. **Verified in a real browser** (headless Chromium, all 5 questions and the
+model-down case). **Open:** (1) nothing in the demo. (2) The owner raised retraining for
+a full epoch (run 2 saw about a quarter of `data/b1_v2`; about 7 h on the RTX 3050) to raise accuracy. It has not
+been started. A better adapter is a `--adapter` swap. (3) The rest of C0 (fusion modules) and C2 (other specialists).
+
 **Standing (2026-09-21, Phase 2 under way, owner said "go" for steps 1-5):** steps 1-3 are done (see the History
 entries: run 1 misses the primary bar, +4.1 binary and +1.7 mcq over text-only). **Phase 2 (steps 1-5) is complete.** Run 2 (`data/b5_run2/adapter_final`) passes the pre-registered primary and secondary
 tests on `bench_hard` main (+6.1 binary, +8.6 mcq over text-only) but its binary lead vanishes on held-out tiles; held-out mcq
 keeps +8.6. See the newest History entry. **Owner decision needed on what comes next** (B6 grounding, C0, more bench patches to
 fill the thin categories, or a repeat seed); nothing further has been started.
-`docs/STARTUP_GUIDE.md` is written but not yet walked through in a browser.
+`docs/STARTUP_GUIDE.md` §3a (live model) has been walked through in a browser (2026-09-21); the A-G demo scenarios in §5 have not.
 
 **Decision taken 2026-09-20 (owner): train the first B5 adapter locally, not on Kaggle.** This rests on the
 measured dry runs recorded in the Development Plan under D2 (QLoRA fit on the RTX 3050); it amends D2's
@@ -152,14 +164,15 @@ The backend suite uses FastAPI's `TestClient`, so no server needs to be running.
 
 Real, known, not yet fixed (as opposed to "Known limitations", which are accepted):
 
-1. **The scorer and both fusion modules still call `ScenarioEngine` directly**
+1. **The scorer (demo path) and both fusion modules still call `ScenarioEngine` directly.** The live-model path
+   (single-image, `SATQUERY_VQA_MODEL_URL` set) no longer does, since 2026-09-21. The remainder of the original item:
    (`confidence_scorer.py`, `complementarity_detector.py`, `verbalizer.py`, plus the specialists).
    Harmless now; it must be removed before real inference lands (Plan step C0), or the scorer will
    override real model confidence with canned rationales.
 2. **Demo mock traces are a copy, not generated.** `frontend/src/data/mockTraces.ts` will drift if
    the backend pipeline's steps change. Regenerate it from a live `/v1/analyze` response. One known difference from live: its
    `input_images` parameters name `opt_s2.png` / `sar_s1.png`, not the demo's file names.
-3. **Two lint warnings** (`react/only-export-components` in `SatQueryContext.tsx`, currently lines 69 and 308).
+3. **Two lint warnings** (`react/only-export-components` in `SatQueryContext.tsx`, currently lines 89 and 386).
    Non-blocking; fix by moving the shared constants to their own file.
 4. **Started, not finished.** **D1 and D2 are both closed** (backbone `Qwen/Qwen2-VL-2B-Instruct`;
    RTX 3050 with 4 GB usable VRAM). **D2's "training goes to the cloud" was amended by measurement and then
@@ -185,6 +198,7 @@ Real, known, not yet fixed (as opposed to "Known limitations", which are accepte
 
 Things that were changed but not confirmed the way a user would meet them:
 
+
 - **Nobody has clicked through the containerised frontend in a browser.** CI proves both images build, that the
   stack comes up healthy, that an analyze cycle works through it and that a session survives a restart,
   but its frontend check is only that nginx serves `index.html` for `/` and for a client route. Locally,
@@ -195,10 +209,12 @@ Things that were changed but not confirmed the way a user would meet them:
   rasterio (1.5) that makes the CRS tests fail locally with "PROJ: ... proj.db ... another PROJ
   installation". It is an environment clash, not a code fault: in a clean venv the full suite passes
   with `PROJ_DATA` and `PROJ_LIB` pointed at `rasterio/proj_data`. Linux CI is unaffected.
-- **A user-uploaded GeoTIFF probably shows a broken preview.** `ImageUploader.tsx` builds the on-screen
-  preview with `URL.createObjectURL(file)`, and Chromium-based browsers do not decode TIFF in an `<img>`.
-  Demos are unaffected (they show the SVG preview). Not tested with a real upload; the conclusion comes
-  from how browsers behave, not from an observation here.
+- ~~A user-uploaded GeoTIFF probably shows a broken preview.~~ **Resolved 2026-09-21:** the card now shows a PNG
+  rendered by `POST /v1/inspect`. Verified in Chromium by uploading `Sentinel1_SAR_Assam_C_Band.tif`: the preview
+  rendered, with EPSG:32646 and 10 m read from the file.
+- **After an ordinary upload the previously selected demo scenario stays selected** (seen in a screenshot
+  2026-09-21). If the backend then fails, that scenario's mock answer is shown for the user's image (audit 3.6b). This
+  existed before; the live-model samples are not affected.
 - **Answers and labels describe more than the rasters measure.** The scenario D picture and answer claim
   42% cloud, while the 8-bit brightness approximation reads 5.06% from the file. The cloud share stays
   under the warning threshold, so no tier changes, and the answer text is pinned by the parity snapshot,
@@ -251,6 +267,197 @@ Accepted for the prototype, not defects to fix now:
 ---
 
 ## History
+
+### 2026-09-21 — Upload metadata read from the file, four more real images, interpreter narrowed, all docs refreshed
+
+The owner asked for four things: fix the upload metadata bug, add more images and questions if feasible, update every
+markdown file, and give a commit message.
+
+- **Metadata bug (audit 3.1) fixed.**
+  - New `POST /v1/inspect` (`routes_analyze.py`, `InspectResponse` in `api_models.py`). It runs the existing
+    `metadata_service.inspect_file` on one upload and adds `render_preview`: a PNG data URI, longest side ≤ 512, via
+    Pillow for 8-bit images and a 2-98 percentile rasterio stretch otherwise.
+  - The bytes go to a temporary directory under a fixed name, and the client's filename is only a label.
+  - `ImageUploader.tsx` no longer invents CRS, GSD, bands or dates. It shows "Reading file…", then fills the card from
+    the reply. If the backend is unreachable the fields stay unknown (`metadataStatus`, frontend-only).
+  - `ImagePreview` labels unknowns "No CRS", "GSD unknown" and "Date unknown". The old "Unprojected" and "Current"
+    were claims.
+  - This also resolves the TIFF-preview verification gap.
+- **Audit items fixed on the way:**
+  - 3.2: removing an image clears its file, and `resolveFile` checks the image first.
+  - 3.3: drag-and-drop is implemented.
+  - 3.4: the same file can be picked again.
+  - 3.5: blob URLs are revoked once the backend preview arrives.
+- **Four more real images.**
+  - Candidates were unseen-tile patches with at least 3 `bench_hard` questions and at least 80% correct in the stored
+    run-2 evaluation. All 8 candidates, re-asked through `ml/serve_vqa.py` with the float32 answer reading, were 100%
+    correct.
+  - Four were added for variety of country and season: T29UPU_38_37 (Ireland, Apr 2018, 5 questions),
+    T34UEG_28_34 (Lithuania, Apr 2018, 6), T34TCR_36_25 (Serbia, Aug 2017, 4) and T29SND_42_38 (Portugal, Nov 2017,
+    3). That makes five images and 23 questions.
+  - `tools/make_real_sample.py` now builds a list (`PATCH_IDS`). It re-checks that no tile appears in training, checks
+    pixels against the evaluation PNGs, and writes `frontend/src/data/realSamples.json` (replacing `realSample.json`).
+  - The UI has one green "Live model" row in `DemoScenarioBar` with a card per image (thumbnail, country, month,
+    question count), above a "Demo engine" row. The context tracks the sample by id (`activeRealSample`).
+- **Interpreter narrowed (audit 2.3, partly).** Three of the new questions were misrouted: "between" (a range or an
+  adjacency) went to change, and a choice question saying "where is" went to grounding. Bare "between" is no longer a
+  change cue, and a question listing a)–d) options is never grounding or captioning. Regression tests are in
+  `tests/test_orchestration.py`, and `tests/test_real_model.py` checks every sample question routes to `single_vqa`.
+  The demo parity tests are unchanged and passing.
+- **Tests**: 195 pytest (new `tests/test_inspect.py`, 7 tests), 72 Vitest (`LiveModelSample.test.tsx` covers one card
+  per image, per-image chips, hand upload, inspect "reading" to "read", backend down leaving "unknown", and a removed
+  image never being sent). `tsc` and the build are clean, and lint shows the 2 known warnings.
+- **Browser (Chromium)**: all 23 questions go card, chip, Run, Results. Each is answered live (200), matches the
+  reference, and the console is clean. The ordinary-upload check (demo SAR GeoTIFF) shows EPSG:32646, 10 m, the SAR
+  modality and a rendered preview. The invented EPSG:32643 / 0.65 m are gone.
+- **Docs refreshed**: `CLAUDE.md` (routes, live-model paragraph, upload rule), `docs/STARTUP_GUIDE.md` (§3a rewritten:
+  five-image table, hand and ordinary uploads; checklist counts; rough edges), `docs/SatQuery_AI_SPDD.md` (§9.1 note,
+  new §9.7, §12.1), `docs/SatQuery_AI_Development_Plan.md` (F2, C2 note), `docs/AUDIT_REPORT.md` (status block),
+  `docs/HANDOFF_PROMPT.md` (rewritten), this log. `docs/Problem_Statement.md` and
+  `docs/SatQuery_AI_Final_Synthesized_Solution.md` describe the problem and the design principles, so they needed no
+  change.
+
+### 2026-09-21 — The live-model sample can be uploaded by hand
+
+The owner wants to upload the image themselves during the demo. Before this change, a hand upload of
+`frontend/public/real/bigearthnet_T29UPU_55_58.tif` went through `ImageUploader`'s placeholder metadata:
+- it showed EPSG:32643 and 0.65 m, which are wrong (the audit's 3.1);
+- the preview was broken, because browsers cannot display a TIFF;
+- the question chips, the reference check and the no-fallback rule did not apply.
+
+The change:
+- `ImageUploader` now recognises the sample's GeoTIFF or PNG by file name in slot 1 and calls
+  `loadRealSample(undefined, file)`. That sends the uploaded bytes and shows the true facts with the PNG preview.
+- For the PNG, CRS, GSD and time are left null rather than borrowed, since the PNG has no georeference.
+- A hand upload keeps the typed query.
+- `realSampleActive` now accepts either file name.
+- Other uploads are unchanged, so the placeholder-metadata defect remains for them.
+- Tests: `LiveModelSample.test.tsx` +2 (GeoTIFF: true CRS, PNG preview, the file itself sent, no fetch; PNG: no
+  invented CRS). Vitest has 68, all passing; `tsc` is clean and lint shows the 2 known warnings.
+- **Browser check** (Chromium, real file through the file input): the card shows EPSG:32629, 10 m and 2017-11-12,
+  the chips appear, the multiple-choice question is answered live (200) and matches the reference, and there are no
+  console errors.
+- Docs: `STARTUP_GUIDE.md` §3a gives the upload path.
+
+### 2026-09-21 — Live-model sample moved into the studio: one place to pick an image and a question
+
+The owner found two input areas confusing. The separate panel had its own image and question list above the studio's
+uploader and query box. The owner chose the studio as the single place. The change:
+- `RealSamplePanel.tsx` was deleted.
+- The sample is now the first card in `DemoScenarioBar.tsx` ("Live Model · Real Data — BigEarthNet Sentinel-2
+  (Trained LoRA)", green border; the bar's badge now reads "Demo Engine + 1 Live Model"). Clicking it calls the
+  existing `loadRealSample()`, so the real GeoTIFF fills Image 1.
+- While the sample is active, `QueryInput.tsx` swaps its suggestion chips for the sample's 5 BigEarthNet questions
+  and shows the accuracy note. Any other scenario brings the ISRO queries back.
+- The first card's contrast was checked in screenshots and raised (light background, dark green text).
+- The test file became `LiveModelSample.test.tsx`: 7 tests driving the preset bar and the query box, including that
+  the chips switch back.
+- Vitest has 66 tests, all passing. Build and `tsc` are clean, and lint shows the 2 known warnings.
+- **Verified in the browser again** (headless Chromium): all 5 questions go preset card, chip, Run, Results. Each is
+  answered live (200), matches the reference, and the console is clean.
+- Docs: `STARTUP_GUIDE.md` §3a steps and `CLAUDE.md`.
+
+### 2026-09-21 — Live-model demo verified in a browser; one bug found and fixed
+
+The owner asked for a browser check. Playwright and Chromium were installed in a throwaway venv in the session
+scratchpad; nothing was added to the project or to `requirements.txt`. With the model server, the backend (URL set)
+and Vite running, a script opened `/analyze`, clicked each of the 5 panel questions, ran the analysis and read the
+Results page.
+- **All 5 pass in the browser.** Each run is one `POST /v1/analyze` returning 200, the badge reads "Live Backend",
+  the reference check says "the model matches it", the trace shows the `b5_run2_lora` step with its distribution and
+  latency, no boxes are drawn, and the console is clean.
+- **Model server stopped:** the page stays on `/analyze` with the red "No answer" box naming the start command, after
+  one 503. No mock result is shown.
+- **Bug found only in the browser, fixed.** The Results page's Visual Evidence Canvas showed a broken image.
+  `resolveAssetUrl` (`frontend/src/services/api.ts`) prefixed every relative path with the API base, so the
+  frontend's own `/real/...png` was requested from `:8000` and returned 404. It now prefixes only backend paths
+  (`/storage/`, `/v1/`) and leaves other same-origin assets alone. A regression test was added in `api.test.ts`.
+  The existing demos were unaffected because their previews are data URIs. After the fix the canvas shows the patch.
+- Vitest now has 65 tests, all passing; `tsc -b` is clean. Files (uncommitted): `frontend/src/services/api.ts`,
+  `frontend/src/services/api.test.ts`, this log.
+
+### 2026-09-21 — Live-model website demo: the run-2 adapter answers a real BigEarthNet image through the full pipeline
+
+The owner asked for a simple walkthrough in the website where a real trained model answers questions about a real
+satellite image, with no demo model or demo data on that path. The plan was approved first. What was built:
+
+- **`ml/serve_vqa.py`** (new, `.venv-ml`). A FastAPI server on `127.0.0.1:8001` that loads Qwen2-VL-2B 4-bit and
+  `data/b5_run2/adapter_final` once. `POST /vqa {image_path, question}` returns the answer, its probability over the
+  candidate answers (yes/no or the offered a-d), the greedy reply, the latency and the model, revision and adapter.
+  - Two measured pitfalls are handled in the code. A separate forward pass after `generate` reads stale Qwen2-VL
+    rotary state, so the distribution comes from the first `generate` step.
+  - The model's bfloat16 logits tie yes and no exactly on 3 of the 5 sample questions (0.5 / 0.5). Greedy decoding
+    then broke the tie by token order, so the candidate logits are recomputed in float32 from the hidden state
+    entering `lm_head`, which is not quantised.
+  - Questions outside the trained format get a free-form reply, flagged as such.
+- **Backend**:
+  - `config.py`: `VQA_MODEL_URL` (unset by default, so behaviour is unchanged), `VQA_MODEL_TIMEOUT_SECONDS` and
+    `MODEL_MEDIUM_PROBABILITY` (0.75).
+  - `services/model_client.py` (httpx; `ModelUnavailableError` becomes 503, `ModelError` becomes 502, both in
+    `routes_analyze.py`).
+  - `VqaCaptionSpecialist.answer_with_model` sends the uploaded file itself.
+  - The router's single-image branch skips the demo grounding call and records a trace step with the adapter, the
+    answer distribution, the raw reply and the latency.
+  - `ConfidenceScorer` takes the tier from the model probability: Medium at or above 0.75, otherwise Low, never
+    High. The rationale states the held-out accuracy. The scenario engine is not called on this path (C0 partial).
+  - The wire schema is unchanged, so `satquery.ts` needed no edit.
+- **Real sample**: `tools/make_real_sample.py` renders patch `S2B_MSIL2A_20171112T114339_N9999_R123_T29UPU_55_58`
+  (Ireland, 12 Nov 2017) from its raw B04/B03/B02 bands with `b1_slice.render()`.
+  - The script refuses to write unless the pixels equal the evaluation PNG.
+  - It writes a 3-band GeoTIFF keeping the patch's own CRS (EPSG:32629) and 10 m transform, a PNG preview
+    (`frontend/public/real/`), and `frontend/src/data/realSample.json` with the patch's 5 `bench_hard` questions and
+    reference answers.
+  - Tile T29UPU appears in neither `train.jsonl` nor `validation.jsonl`.
+  - The patch was chosen because run 2 got all 5 right in the stored evaluation (a grey image got 3, text-only 2).
+    It is a sample, not an accuracy figure, and the panel says so.
+- **Frontend**:
+  - `RealSamplePanel.tsx` on `/analyze`: the image, facts, the 5 questions as buttons and the accuracy caveat.
+  - `SatQueryContext`: `loadRealSample`, `realSampleActive`, `analysisError`. While the sample is loaded, a failed
+    call shows a red "No answer" box instead of falling back to a mock result.
+  - `ReferenceCheck.tsx` on Results grades the answer against the BigEarthNet reference.
+  - The sample's JSON lives in `src/data/` because Vite cannot import from `public/`.
+- **Tests**:
+  - `tests/test_real_model.py` (15, fake model server). It checks that the model receives the uploaded bytes, that
+    the scenario engine is never called (booby-trapped), that there are no boxes or grounding step, the trace
+    fields, the tier thresholds, the free-form label, the 503/502 paths, that other tasks and the switch-off path
+    stay on the demo engine, and that the interpreter routes all 5 sample questions to `single_vqa`.
+  - `tests/test_ml.py` +3: question kind, candidates, option text.
+  - `RealSamplePanel.test.tsx` (6).
+  - Totals: 176 pytest, 64 Vitest. `tsc -b && vite build` is clean, and lint shows the 2 known warnings.
+- **Live result** (model server, backend with the URL set, and Vite running; driven over HTTP as the browser would):
+
+  | Question | Answer, probability | Tier | Reference |
+  |---|---|---|---|
+  | inland waters? | No, 78% | Medium | no |
+  | pastures at least 90%? | No, 51% | Low | no |
+  | complex cultivation bordering urban fabric? | No, 50% | Low | no |
+  | exactly two arable areas? | No, 51% | Low | no |
+  | arable share (a-d) | b) 30 to 60%, 34% | Low | b |
+
+  - All 5 are correct. The specialist step takes 650-1,000 ms, of which about 400 ms is model time.
+  - The metadata read from the uploaded file: EPSG:32629, 10 m, 2017-11-12.
+  - With the server stopped, the call returns 503.
+
+**Caution.** The answers are right but mostly unconfident. Three yes/no answers are within 1 point of a coin flip,
+consistent with run 2's held-out result (no binary lead on unseen tiles). The demo shows the pipeline running a
+real model honestly, not a strong model. **Docs**: `STARTUP_GUIDE.md` §3a (three-terminal run and expected
+answers), `CLAUDE.md`, Development Plan C0/C2 marked PARTIAL, `.env.example`. **Not verified**: a click-through in a
+browser (see Verification gaps). Files (uncommitted): `ml/serve_vqa.py`, `tools/make_real_sample.py`,
+`backend/app/{config.py,services/model_client.py,specialists/vqa_caption.py,orchestrator/specialist_router.py,
+orchestrator/confidence_scorer.py,orchestrator/orchestrator_service.py,api/routes_analyze.py}`,
+`frontend/public/real/*`, `frontend/src/data/realSample.{ts,json}`,
+`frontend/src/components/{RealSamplePanel,ReferenceCheck}.tsx`, `RealSamplePanel.test.tsx`, `SatQueryContext.tsx`,
+`UploadQuery.tsx`, `Results.tsx`, `tests/test_real_model.py`, `tests/test_ml.py`, and the docs above.
+
+### 2026-09-21 — Whole-project audit written to `docs/AUDIT_REPORT.md` (no code changed)
+
+Read-only audit of backend, frontend, tests, `ml/` and all markdown, with the main claims reproduced against the running code.
+Baseline confirmed: 158 pytest and 58 Vitest pass, `tsc` clean, lint shows the two known warnings. Headline findings: the session
+database is downloadable at `/storage/satquery.db`; upload filenames are unsanitized (files written outside the storage root); the
+optical+SAR `modality_mismatch` rule misses `multispectral` files; `requiredModalities` is never enforced; the confidence scorer's
+own rules are unreachable behind `ScenarioEngine`; the frontend fabricates upload metadata and a High-confidence result on API
+failure; several plan items marked DONE (B2, B7, B10, B11, B14, F2) are only partly implemented. Nothing is fixed yet; the report
+proposes a seven-step order. Files (uncommitted): `docs/AUDIT_REPORT.md`, `docs/PROGRESS_LOG.md`.
 
 ### 2026-09-21 — Phase 2 step 5: run 2 scored (six runs); passes on tiles seen in training, does not generalise on binary
 

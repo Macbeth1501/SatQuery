@@ -5,8 +5,11 @@ import { CapabilityHints } from '../components/CapabilityHints';
 import { AnalyzeButton } from '../components/AnalyzeButton';
 import { DemoScenarioBar } from '../components/DemoScenarioBar';
 import { ProcessingStatus } from '../components/ProcessingStatus';
+import { useSatQuery } from '../context/SatQueryContext';
 
 export const UploadQuery: React.FC = () => {
+  const { analysisError } = useSatQuery();
+
   return (
     <div style={{ padding: '16px 0 48px' }}>
       {/* Page Heading */}
@@ -56,6 +59,25 @@ export const UploadQuery: React.FC = () => {
 
         {/* Analyze Submission Action */}
         <AnalyzeButton />
+
+        {analysisError && (
+          <div
+            role="alert"
+            style={{
+              marginTop: 16,
+              padding: '12px 16px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--rose-danger)',
+              background: 'var(--rose-glow)',
+              color: 'var(--text-primary)',
+              fontSize: 13,
+              lineHeight: 1.45,
+            }}
+          >
+            <strong>No answer: </strong>
+            {analysisError}
+          </div>
+        )}
       </div>
 
       {/* Processing State Modal (Active during step progression) */}
