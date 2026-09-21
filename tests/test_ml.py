@@ -11,6 +11,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ml"))
 
+import b5_change_rate as R  # noqa: E402
 import b5_compare as C  # noqa: E402
 import b5_text_only as T  # noqa: E402
 
@@ -162,3 +163,108 @@ def test_answer_parser_reads_bare_and_punctuated_answers_but_not_sentences():
     # The evaluation is strict by design (see the progress log): a sentence is unreadable, so counts as wrong.
     assert normalise_choice("There is no instance of industrial areas.", "binary") is None
     assert normalise_choice("The answer is b", "mcq") is None
+
+
+# ---- change rate between two runs -------------------------------------------------------------------------
+
+def _result(tmp_path, name, rows):
+    import json
+
+    path = tmp_path / name
+    path.write_text(json.dumps({"replies": [{"id": i, "type": t, "category": c, "parsed": p} for i, t, c, p in rows]}))
+    return path
+
+
+def test_change_rate_pairs_on_type_and_id_and_ignores_unshared_ids(tmp_path):
+    a = _result(tmp_path, "a.json", [(1, "binary", "x", "yes"), (2, "binary", "x", "no"), (9, "binary", "x", "yes")])
+    b = _result(tmp_path, "b.json", [(2, "binary", "x", "yes"), (1, "binary", "x", "yes"), (7, "binary", "x", "no")])
+    out = R.change_rate(a, b)["all"]
+    assert (out["changed"], out["unchanged"], out["pairs"]) == (1, 1, 2)
+
+
+def test_change_rate_arithmetic_and_per_type_and_category_groups(tmp_path):
+    a = _result(tmp_path, "a.json", [(i, "binary", "s", "yes") for i in range(4)] + [(10, "mcq", "t", "a"), (11, "mcq", "t", "b")])
+    b = _result(tmp_path, "b.json", [(0, "binary", "s", "no"), (1, "binary", "s", "yes"), (2, "binary", "s", "yes"),
+                                     (3, "binary", "s", "yes"), (10, "mcq", "t", "a"), (11, "mcq", "t", "c")])
+    out = R.change_rate(a, b)
+    assert out["binary"]["change_rate"] == pytest.approx(0.25)
+    assert out["mcq/t"]["change_rate"] == pytest.approx(0.5)
+    assert out["all"]["change_rate"] == pytest.approx(2 / 6)
+    assert out["all"]["ci95"][0] < out["all"]["change_rate"] < out["all"]["ci95"][1]
+
+
+def test_change_rate_keeps_unreadable_replies_in_their_own_bucket(tmp_path):
+    a = _result(tmp_path, "a.json", [(1, "binary", "x", None), (2, "binary", "x", "yes"), (3, "binary", "x", "no")])
+    b = _result(tmp_path, "b.json", [(1, "binary", "x", "yes"), (2, "binary", "x", None), (3, "binary", "x", "no")])
+    out = R.change_rate(a, b)["all"]
+    assert (out["changed"], out["unchanged"], out["unreadable_either_side"]) == (0, 1, 2)
+    assert out["change_rate"] == 0.0
+
+
+def test_change_rate_refuses_a_result_without_per_example_replies(tmp_path):
+    import json
+
+    old = tmp_path / "old.json"
+    old.write_text(json.dumps({"accuracy": {}}))
+    good = _result(tmp_path, "g.json", [(1, "binary", "x", "yes")])
+    with pytest.raises(SystemExit):
+        R.change_rate(old, good)
+
+
+# ---- resumable training state -----------------------------------------------------------------------------
+
+def test_training_state_restores_optimiser_batch_order_and_parameters(tmp_path):
+    torch = pytest.importorskip("torch")
+    import b5_train_lora as L
+
+    def build():
+        torch.manual_seed(0)
+        model = torch.nn.Linear(3, 1)
+        return model, torch.optim.AdamW(model.parameters(), lr=0.1), torch.amp.GradScaler("cuda", enabled=False)
+
+    def train(model, opt, order, cursor, steps):
+        for _ in range(steps):
+            i = order[cursor]
+            cursor += 1
+            x = torch.tensor([[float(i), 1.0, 2.0]]) + torch.randn(1, 3) * 0.01  # consumes torch RNG
+            opt.zero_grad()
+            model(x).pow(2).sum().backward()
+            opt.step()
+        return cursor
+
+    random.seed(5)
+    order = list(range(20))
+    random.shuffle(order)
+
+    model, opt, scaler = build()
+    cursor = train(model, opt, order, 0, 3)
+    L.save_state(tmp_path / "state_step3.pt", opt, scaler, 3, cursor, order, 0, 10)
+    weights = {k: v.clone() for k, v in model.state_dict().items()}
+    train(model, opt, order, cursor, 4)  # the uninterrupted continuation
+    expected = {k: v.clone() for k, v in model.state_dict().items()}
+    expected_next = random.random()
+
+    model2, opt2, scaler2 = build()  # a fresh process: new optimiser, weights reloaded from the adapter file
+    model2.load_state_dict(weights)
+    random.seed(999)
+    torch.manual_seed(999)
+    step, cursor2, order2, skipped = L.load_state(tmp_path / "state_step3.pt", opt2, scaler2, 10)
+    assert (step, cursor2, order2, skipped) == (3, cursor, order, 0)
+    train(model2, opt2, order2, cursor2, 4)
+    for key, value in expected.items():
+        assert torch.equal(model2.state_dict()[key], value)
+    assert opt2.state_dict()["state"][0]["step"] == opt.state_dict()["state"][0]["step"]
+    assert random.random() == expected_next
+    assert L.newest_state(tmp_path) == (tmp_path / "state_step3.pt", 3)
+
+
+def test_resume_refuses_a_state_from_a_run_of_a_different_length(tmp_path):
+    torch = pytest.importorskip("torch")
+    import b5_train_lora as L
+
+    model = torch.nn.Linear(2, 1)
+    opt = torch.optim.AdamW(model.parameters())
+    scaler = torch.amp.GradScaler("cuda", enabled=False)
+    L.save_state(tmp_path / "state_step1.pt", opt, scaler, 1, 0, [0], 0, 300)
+    with pytest.raises(SystemExit):
+        L.load_state(tmp_path / "state_step1.pt", opt, scaler, 100)

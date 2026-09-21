@@ -40,7 +40,42 @@ def parse():
     p.add_argument("--eval-n", type=int, default=100, help="validation examples scored per pass")
     p.add_argument("--save-every", type=int, default=200)
     p.add_argument("--seed", type=int, default=20260920)
+    p.add_argument("--resume", default=None, metavar="DIR",
+                   help="continue from the newest state_step{N}.pt and adapter_step{N} (or adapter_final) in DIR; "
+                        "use the same --max-steps and hyperparameters as the run being resumed")
     return p.parse_args()
+
+
+def save_state(path, opt, scaler, step, cursor, order, skipped, total):
+    """Everything besides the adapter weights that a resumed run needs to continue exactly where this one stopped."""
+    torch.save({"opt": opt.state_dict(), "scaler": scaler.state_dict(), "step": step, "cursor": cursor,
+                "order": list(order), "skipped": skipped, "total": total, "py_rng": random.getstate(),
+                "torch_rng": torch.get_rng_state(),
+                "cuda_rng": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None}, path)
+
+
+def load_state(path, opt, scaler, total):
+    """Restore what save_state wrote into `opt` and `scaler` and the RNGs; return step, cursor, order and skipped."""
+    state = torch.load(path, map_location="cpu", weights_only=False)  # our own file, holds a random.getstate tuple
+    if state["total"] != total:
+        raise SystemExit(f"{path} was saved for a {state['total']}-step run but this run has {total} steps; the "
+                         "learning-rate schedule would not match. Pass the same --max-steps / --epochs.")
+    opt.load_state_dict(state["opt"])
+    scaler.load_state_dict(state["scaler"])
+    random.setstate(state["py_rng"])
+    torch.set_rng_state(state["torch_rng"])
+    if state["cuda_rng"] is not None and torch.cuda.is_available():
+        torch.cuda.set_rng_state_all(state["cuda_rng"])
+    return state["step"], state["cursor"], state["order"], state["skipped"]
+
+
+def newest_state(directory):
+    """Path of the state_step{N}.pt with the largest N in `directory`, and N."""
+    found = [(int(p.stem.removeprefix("state_step")), p) for p in Path(directory).glob("state_step*.pt")]
+    if not found:
+        raise SystemExit(f"no state_step*.pt in {directory}; nothing to resume from")
+    step, path = max(found)
+    return path, step
 
 
 def lr_at(step, total, args):
@@ -101,8 +136,18 @@ def main():
     (out / "run_meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
     print(json.dumps(meta, indent=1), flush=True)
 
+    order, cursor, skipped, start, started = [], 0, 0, 0, time.time()
+    if args.resume:
+        from peft import set_peft_model_state_dict
+        from safetensors.torch import load_file
+
+        state_path, saved_step = newest_state(args.resume)
+        adapter = Path(args.resume) / (f"adapter_step{saved_step}" if (Path(args.resume) / f"adapter_step{saved_step}").exists()
+                                       else "adapter_final")
+        set_peft_model_state_dict(model, load_file(adapter / "adapter_model.safetensors"))
+        start, cursor, order, skipped = load_state(state_path, opt, scaler, total)
+        print(f"resumed from {state_path} and {adapter}: continuing at step {start + 1} of {total}", flush=True)
     model.train()
-    order, cursor, skipped, started = [], 0, 0, time.time()
     torch.cuda.reset_peak_memory_stats()
 
     def emit(record):
@@ -111,7 +156,7 @@ def main():
             fh.write(json.dumps(record) + "\n")
         print(record, flush=True)
 
-    for step in range(total):
+    for step in range(start, total):
         for group in opt.param_groups:
             group["lr"] = lr_at(step, total, args)
         step_loss, counted = 0.0, 0
@@ -144,8 +189,10 @@ def main():
             emit({"step": step + 1, **validate(model, processor, root, args.size, val, args.eval_n)})
         if args.save_every and (step + 1) % args.save_every == 0:
             model.save_pretrained(out / f"adapter_step{step + 1}")
+            save_state(out / f"state_step{step + 1}.pt", opt, scaler, step + 1, cursor, order, skipped, total)
 
     model.save_pretrained(out / "adapter_final")
+    save_state(out / f"state_step{total}.pt", opt, scaler, total, cursor, order, skipped, total)
     emit({"done": True, "steps": total, "skipped_nonfinite": skipped,
           "peak_alloc_mib": round(torch.cuda.max_memory_allocated() / 2**20)})
 
