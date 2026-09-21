@@ -35,9 +35,9 @@ inference layer is stubbed.
 | Pillow bounding-box and change-mask overlays | Complete |
 | Session persistence | Complete — SQLite (see the datastore row below); legacy `response.json` files are imported on first read |
 | React frontend, 3 routes, 15 components | Complete, verified in-browser |
-| Test suite: 203 pytest + 73 Vitest tests | All passing (22 in `tests/test_ml.py`, some of which skip when scikit-learn, scipy or torch are missing; `tests/test_real_model.py` and `tests/test_inspect.py` need no GPU) |
+| Test suite: 207 pytest + 73 Vitest tests | All passing (26 in `tests/test_ml.py`, some of which skip when scikit-learn, scipy or torch are missing; `tests/test_real_model.py` and `tests/test_inspect.py` need no GPU) |
 | Demo inputs | Seven georeferenced GeoTIFFs in `frontend/public/demo/` (scenarios A, C, D, E, and G which reuses C's pair reversed); B and F stay plain PNGs on purpose. Georeferencing is real, the pictures are synthetic |
-| ML training side (`ml/`) | B1 thin slice built and verified; B5 LoRA train/eval/notebook written; baseline evaluated; **run 1 (old leaky slice, `data/b5_run1/adapter_final`) showed no evidence of image reading; run 2 (leak-neutral `data/b1_v2`, 300 steps in 1 h 43 min, `data/b5_run2/adapter_final`) passes the pre-registered test on `bench_hard` main (+6.1 binary, +8.6 mcq over text-only) but its binary lead is gone on held-out tiles (held-out mcq keeps +8.6)**. Not wired into the backend. `tests/test_ml.py` (22 tests) covers the CPU-side pieces (option parser, text-only baseline, raking, sampler, McNemar, answer parser, change rate, resumable training state on a toy model); training, extraction and GPU evaluation have no automated tests |
+| ML training side (`ml/`) | B1 thin slice built and verified; B5 LoRA train/eval/notebook written; baseline evaluated; **run 1 (old leaky slice, `data/b5_run1/adapter_final`) showed no evidence of image reading; run 2 (leak-neutral `data/b1_v2`, 300 steps in 1 h 43 min, `data/b5_run2/adapter_final`) passes the pre-registered test on `bench_hard` main (+6.1 binary, +8.6 mcq over text-only) but its binary lead is gone on held-out tiles (held-out mcq keeps +8.6)**. Not wired into the backend. `tests/test_ml.py` (26 tests) covers the CPU-side pieces (option parser, text-only baseline, raking, sampler, McNemar, answer parser, change rate, resumable training state on a toy model); training, extraction and GPU evaluation have no automated tests |
 | **Specialist inference** | **Dummy — `ScenarioEngine` lookup — except single-image VQA/captioning when `SATQUERY_VQA_MODEL_URL` is set: real adapter over HTTP (`ml/serve_vqa.py`), verified live 2026-09-21** |
 | Live-model demo | Green row of the preset bar on `/analyze`: five real BigEarthNet Sentinel-2 patches (Ireland ×2, Lithuania, Serbia, Portugal; tiles never seen in training), 23 questions, 23 of 23 correct in the browser, 2 rated Medium and 21 Low. A card, or uploading the file by hand, loads the GeoTIFF into Image 1 and the query chips become its questions. Free-form questions are answered by the base model with the adapter off (2026-09-22). Grounding, change and fusion on non-demo images are refused as `no_trained_model` while the live model is on |
 | **Optical/SAR fusion** | **Dummy — hardcoded region tags** |
@@ -68,13 +68,17 @@ fusion query, returning HTTP 200 with a full trace rather than an error.
 
 ## Next step
 
-**Newest (2026-09-22): the three fixes are done and verified; the full-epoch retrain is next (owner's stated order).**
-The fixes are in the newest History entry. The retrain (`docs/HANDOFF_PROMPT.md` §5 step 3) is about 7 h on the RTX 3050 and
-needs the GPU free: nothing is running now (the model server, backend and my Vite were stopped; the owner's own Vite on
-5173 was left). Consider first removing country, season and climate from the caption targets, since a 120 px patch
-cannot show them, and judge the new adapter only by its paired lead over the text-only model on `bench_hard` (main and
-held-out). After that: security items 1.1-1.3 (`docs/AUDIT_REPORT.md`), then B6 grounding, B7 change, B3/C1 interpreter and
-fusion.
+**Newest (2026-09-22): run 3 (full epoch, captions without country/season/climate) is training.** The owner approved
+removing those facts from the caption targets first, and restarted the PC to free the GPU (468 MiB used before launch).
+Data: `data/b1_v3` (built by `ml/b1_v3.py`, see History). Command, from the repo root:
+`.venv-ml/Scripts/python.exe ml/b5_train_lora.py --data data/b1_v3 --out data/b5_run3 --size 448 --epochs 1.0
+--grad-accum 16 --eval-every 200 --eval-n 100 --save-every 100` (log `data/b5_run3_train.log`), 1,218 steps, expected
+about 7 h at run 2's 20.6 s/step. **The GPU is busy until it ends, so the live demo cannot run.** If it dies, rerun the
+same command with `--resume data/b5_run3` (never exercised on the real model). **Then:** score run 3 on `bench_hard` main
+and held-out in the six-run matrix and judge it only by its paired lead over the text-only model (`b5_compare.py`),
+against run 2's +6.1/+8.6 main and -0.5/+8.6 held-out; check the 23 sample answers with `--adapter
+data/b5_run3/adapter_final`; and re-run `ml/b5_freeform_compare.py` with the new adapter to see whether it describes
+without invented facts. After that: security items 1.1-1.3, then B6, B7, B3/C1 and fusion.
 
 **Earlier (2026-09-21): five live-model samples; upload metadata read from the file.** Demo-ready: follow
 `docs/STARTUP_GUIDE.md` §3a.
@@ -242,7 +246,7 @@ Things that were changed but not confirmed the way a user would meet them:
   (still expected to overrun 4 GB; cloud training stands, unmeasured here). It is `torch` peak *allocated*
   memory, not the card's total use, and it ran with 3,303 MiB free because the Windows desktop already held
   about 800 MiB. It says nothing about a LoRA adapter's added memory or about adapter switching latency.
-- **Only the CPU-side `ml/` code has automated tests** (`tests/test_ml.py`, 22 tests); B1's guarantees (disjoint patches, buffer distance) were checked by an
+- **Only the CPU-side `ml/` code has automated tests** (`tests/test_ml.py`, 26 tests); B1's guarantees (disjoint patches, buffer distance) were checked by an
   ad-hoc script, not a committed test. The 300-step local run (bfloat16) completed with no non-finite loss,
   and the saved adapter reloads and changes outputs (checked 2026-09-20). Training loss did NOT visibly fall
   (single-step readings stay in about 0.19-0.50 from step 196 to 300); only validation loss fell (0.633,
@@ -286,6 +290,24 @@ Accepted for the prototype, not defects to fix now:
 ---
 
 ## History
+
+### 2026-09-22 — `data/b1_v3`: caption targets without country, season or climate; run 3 started
+
+The owner asked to drop country, season and climate from the caption targets and then train a full epoch.
+`ml/b1_v3.py` copies `data/b1_v2` and rewrites only the 1,528 captioning rows (1,431 train, 97 validation):
+- the 32 caption prompts, which asked for "the geographic region and season" and similar, are mapped by hand to prompts
+  that ask only for land cover (`QUESTION_MAP`);
+- the answer's first sentence loses "captured during the <season> season in <country>" and "within the "<climate>"
+  climate zone"; any later sentence that still names a country, nationality, season or climate is dropped (213
+  sentences, 1 of which carried an area figure; no caption lost its first sentence or became empty). "fall" as a verb
+  ("fall under the broader category") is kept;
+- the build refuses to write if any caption or caption prompt still names one of them.
+
+The 18,058 binary and mcq rows are byte-identical apart from the image path, which points into `data/b1_v2/images`
+(nothing copied). **Kept on purpose:** the mcq/country, mcq/season and mcq/climate-zone questions (balanced by
+`b5_deleak`, so not guessable from text; the owner asked about captions only). `bench_hard` stays in `data/b1_v2`, so
+run 3 is scored on the same rows as run 2. Tests: 4 new in `tests/test_ml.py` (26 there, 207 pytest overall).
+Run 3 was launched with the command in "Next step".
 
 ### 2026-09-22 — Three fixes from the live session: yes/no detector, honest free-form model, no scripted change on real images
 

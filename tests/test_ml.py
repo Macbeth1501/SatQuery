@@ -12,6 +12,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ml"))
 
+import b1_v3 as V3  # noqa: E402
 import b5_change_rate as R  # noqa: E402
 import b5_compare as C  # noqa: E402
 import b5_text_only as T  # noqa: E402
@@ -309,3 +310,49 @@ def test_server_puts_the_option_text_back_beside_its_letter():
     assert S.answer_text(q, "mcq", "b") == "b) Arable land and Pastures"
     assert S.answer_text("Is it wet?", "binary", "no") == "No"
     assert S.answer_text("Describe it.", "free", "Farmland.") == "Farmland."
+
+
+# ---- b1_v3: caption targets without country, season or climate (ml/b1_v3.py) -----------------------------
+
+CAPTION = (
+    'This satellite image, captured during the fall season in Serbia, showcases a predominantly agricultural '
+    'landscape within the "temperate, no dry season, hot summer" climate zone. The dominant feature is arable land '
+    '(~924,000 sqm). The agricultural areas fall under the broader category of cultivated land. The mix suggests a '
+    'diverse landscape, characteristic of Serbia during the fall season.'
+)
+
+
+def test_caption_loses_country_season_and_climate_but_keeps_land_cover():
+    new, dropped = V3.rewrite_caption(CAPTION)
+    assert new.startswith("This satellite image showcases a predominantly agricultural landscape.")
+    assert "~924,000 sqm" in new
+    # "fall" as a verb is not a season
+    assert "fall under the broader category" in new
+    assert dropped == ["The mix suggests a diverse landscape, characteristic of Serbia during the fall season."]
+    assert not V3.FORBIDDEN.search(new)
+
+
+def test_caption_first_sentence_in_the_other_order():
+    new, _ = V3.rewrite_caption("This satellite image, captured in Austria during spring, showcases a diverse landscape.")
+    assert new == "This satellite image showcases a diverse landscape."
+
+
+def test_caption_questions_ask_only_for_land_cover():
+    for old, new in V3.QUESTION_MAP.items():
+        assert not V3.FORBIDDEN.search(new), new
+        assert not any(w in new.lower() for w in ("region", "location", "where", "when", "time of year")), new
+    with pytest.raises(SystemExit):
+        V3.rewrite_question("A prompt nobody mapped.")
+
+
+def test_only_caption_rows_change_and_images_point_to_the_source():
+    rows = [
+        {"id": 1, "type": "binary", "question": "Is it summer?", "answer": "no", "image": "images/a.png"},
+        {"id": 2, "type": "captioning", "question": "Describe this image in detail.", "answer": CAPTION,
+         "image": "images/b.png"},
+    ]
+    out, report = V3.convert(rows, "../b1_v2")
+    assert out[0] == dict(rows[0], image="../b1_v2/images/a.png")  # binary untouched, even when it says "summer"
+    assert out[1]["image"] == "../b1_v2/images/b.png"
+    assert not V3.FORBIDDEN.search(out[1]["answer"])
+    assert report == {"rows": 2, "captions": 1, "dropped_sentences": 1, "dropped_with_area": 0}
