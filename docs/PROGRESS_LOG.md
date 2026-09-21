@@ -35,11 +35,11 @@ inference layer is stubbed.
 | Pillow bounding-box and change-mask overlays | Complete |
 | Session persistence | Complete — SQLite (see the datastore row below); legacy `response.json` files are imported on first read |
 | React frontend, 3 routes, 15 components | Complete, verified in-browser |
-| Test suite: 195 pytest + 72 Vitest tests | All passing (21 in `tests/test_ml.py`, some of which skip when scikit-learn, scipy or torch are missing; `tests/test_real_model.py` and `tests/test_inspect.py` need no GPU) |
+| Test suite: 203 pytest + 73 Vitest tests | All passing (22 in `tests/test_ml.py`, some of which skip when scikit-learn, scipy or torch are missing; `tests/test_real_model.py` and `tests/test_inspect.py` need no GPU) |
 | Demo inputs | Seven georeferenced GeoTIFFs in `frontend/public/demo/` (scenarios A, C, D, E, and G which reuses C's pair reversed); B and F stay plain PNGs on purpose. Georeferencing is real, the pictures are synthetic |
-| ML training side (`ml/`) | B1 thin slice built and verified; B5 LoRA train/eval/notebook written; baseline evaluated; **run 1 (old leaky slice, `data/b5_run1/adapter_final`) showed no evidence of image reading; run 2 (leak-neutral `data/b1_v2`, 300 steps in 1 h 43 min, `data/b5_run2/adapter_final`) passes the pre-registered test on `bench_hard` main (+6.1 binary, +8.6 mcq over text-only) but its binary lead is gone on held-out tiles (held-out mcq keeps +8.6)**. Not wired into the backend. `tests/test_ml.py` (18 tests) covers the CPU-side pieces (option parser, text-only baseline, raking, sampler, McNemar, answer parser, change rate, resumable training state on a toy model); training, extraction and GPU evaluation have no automated tests |
+| ML training side (`ml/`) | B1 thin slice built and verified; B5 LoRA train/eval/notebook written; baseline evaluated; **run 1 (old leaky slice, `data/b5_run1/adapter_final`) showed no evidence of image reading; run 2 (leak-neutral `data/b1_v2`, 300 steps in 1 h 43 min, `data/b5_run2/adapter_final`) passes the pre-registered test on `bench_hard` main (+6.1 binary, +8.6 mcq over text-only) but its binary lead is gone on held-out tiles (held-out mcq keeps +8.6)**. Not wired into the backend. `tests/test_ml.py` (22 tests) covers the CPU-side pieces (option parser, text-only baseline, raking, sampler, McNemar, answer parser, change rate, resumable training state on a toy model); training, extraction and GPU evaluation have no automated tests |
 | **Specialist inference** | **Dummy — `ScenarioEngine` lookup — except single-image VQA/captioning when `SATQUERY_VQA_MODEL_URL` is set: real adapter over HTTP (`ml/serve_vqa.py`), verified live 2026-09-21** |
-| Live-model demo | Green row of the preset bar on `/analyze`: five real BigEarthNet Sentinel-2 patches (Ireland ×2, Lithuania, Serbia, Portugal; tiles never seen in training), 23 questions, 23 of 23 correct in the browser, 2 rated Medium and 21 Low. A card, or uploading the file by hand, loads the GeoTIFF into Image 1 and the query chips become its questions. The first patch (tile unseen in training) and its 5 BigEarthNet questions, graded against the reference answer on the Results page. All 5 are answered correctly; the probabilities are 78%, 51%, 50%, 51% and 34% |
+| Live-model demo | Green row of the preset bar on `/analyze`: five real BigEarthNet Sentinel-2 patches (Ireland ×2, Lithuania, Serbia, Portugal; tiles never seen in training), 23 questions, 23 of 23 correct in the browser, 2 rated Medium and 21 Low. A card, or uploading the file by hand, loads the GeoTIFF into Image 1 and the query chips become its questions. Free-form questions are answered by the base model with the adapter off (2026-09-22). Grounding, change and fusion on non-demo images are refused as `no_trained_model` while the live model is on |
 | **Optical/SAR fusion** | **Dummy — hardcoded region tags** |
 | Raster metadata extraction | Read from the file (CRS, bands, GSD, footprint, NoData, timestamp). Also exposed before analysis as `POST /v1/inspect`, which fills the upload card and renders a PNG preview (TIFFs included) |
 | Externalized configuration | `SATQUERY_*` env vars and `VITE_API_BASE_URL` |
@@ -68,17 +68,13 @@ fusion query, returning HTTP 200 with a full trace rather than an error.
 
 ## Next step
 
-**Newest (2026-09-22): the owner's live session found four problems; recommended order set, nothing started.**
-The session used new questions in the demo (newest History entry). The full handover, with file and line references, is
-`docs/HANDOFF_PROMPT.md`. Recommended order, awaiting the owner's choice:
-1. **Three fixes, about 1-2 h, no training.**
-   - (a) The yes/no detector in `ml/serve_vqa.py` treats any "Do ..." sentence as yes/no; also correct the wrong "trained
-     only on yes/no" note (`vqa_caption.py`, `confidence_scorer.py`).
-   - (b) Change, fusion and grounding on real images must say no trained model exists, instead of a scripted High answer.
-   - (c) Compare the base Qwen2-VL (adapter disabled) with the adapter for free-form descriptions on the 5 samples.
-2. **Security items** 1.1-1.3 from `docs/AUDIT_REPORT.md`.
-3. **Full-epoch retrain** (about 7 h). Consider dropping country, season and climate from the caption targets first.
-4. **Then** B6 grounding, B7 change, B3/C1 interpreter, and fusion.
+**Newest (2026-09-22): the three fixes are done and verified; the full-epoch retrain is next (owner's stated order).**
+The fixes are in the newest History entry. The retrain (`docs/HANDOFF_PROMPT.md` §5 step 3) is about 7 h on the RTX 3050 and
+needs the GPU free: nothing is running now (the model server, backend and my Vite were stopped; the owner's own Vite on
+5173 was left). Consider first removing country, season and climate from the caption targets, since a 120 px patch
+cannot show them, and judge the new adapter only by its paired lead over the text-only model on `bench_hard` (main and
+held-out). After that: security items 1.1-1.3 (`docs/AUDIT_REPORT.md`), then B6 grounding, B7 change, B3/C1 interpreter and
+fusion.
 
 **Earlier (2026-09-21): five live-model samples; upload metadata read from the file.** Demo-ready: follow
 `docs/STARTUP_GUIDE.md` §3a.
@@ -175,14 +171,17 @@ The backend suite uses FastAPI's `TestClient`, so no server needs to be running.
 
 Real, known, not yet fixed (as opposed to "Known limitations", which are accepted):
 
-0. **Found in the owner's live session 2026-09-22** (details in History and `docs/HANDOFF_PROMPT.md` §4):
-   - (a) "Do Descriptive analysis" answered "No, 92%", because `serve_vqa.py` `BINARY_OPENERS` reads any "Do ..." sentence as
-     yes/no.
-   - (b) Free-form descriptions invent facts: "Finland, spring" for the Irish November patch, and "a large, complex
-     building" for Serbian farmland.
-   - (c) The free-form note wrongly says the adapter was trained only on yes/no and a-d questions; 1,431 of 19,489
-     training examples are captions. The note is in `vqa_caption.py:85-89` and `confidence_scorer.py:83`.
-   - (d) Change analysis on two real patches returned the scripted demo report rated High.
+0. **Found in the owner's live session 2026-09-22: all four fixed the same day** (History has the details).
+   - (a) "Do ..." imperatives read as yes/no: fixed in `question_kind`, checked against all 22,158 binary and a-d questions in `data/b1_v2`.
+   - (b) Free-form descriptions invent facts: the adapter still does; free-form questions now go to the base model. The
+     base model names no country or season but can still describe things that are not there. **Still open: a description
+     that is faithful and useful needs a caption target without country, season and climate, then a retrain.**
+   - (c) The wrong "trained only on yes/no and a-d" note: corrected in `vqa_caption.py` and `confidence_scorer.py`.
+   - (d) Change/fusion/grounding on real images: refused as `no_trained_model` while `SATQUERY_VQA_MODEL_URL` is set.
+     With the URL unset the scripted demo still answers real uploads (accepted; the facade is deliberate).
+   - Two sessions from my own verification script (`sq-96a332b6`, `sq-29d39d3b`, 2026-09-21 19:58 UTC, "What changed
+     between these two dates?" and "Highlight the water bodies...") are in `backend/storage/satquery.db` beside the
+     owner's; I did not delete them (a delete was blocked). They are harmless and the owner may remove them.
 
 1. **The scorer (demo path) and both fusion modules still call `ScenarioEngine` directly.** The live-model path
    (single-image, `SATQUERY_VQA_MODEL_URL` set) no longer does, since 2026-09-21. The remainder of the original item:
@@ -243,7 +242,7 @@ Things that were changed but not confirmed the way a user would meet them:
   (still expected to overrun 4 GB; cloud training stands, unmeasured here). It is `torch` peak *allocated*
   memory, not the card's total use, and it ran with 3,303 MiB free because the Windows desktop already held
   about 800 MiB. It says nothing about a LoRA adapter's added memory or about adapter switching latency.
-- **Only the CPU-side `ml/` code has automated tests** (`tests/test_ml.py`, 12 tests); B1's guarantees (disjoint patches, buffer distance) were checked by an
+- **Only the CPU-side `ml/` code has automated tests** (`tests/test_ml.py`, 22 tests); B1's guarantees (disjoint patches, buffer distance) were checked by an
   ad-hoc script, not a committed test. The 300-step local run (bfloat16) completed with no non-finite loss,
   and the saved adapter reloads and changes outputs (checked 2026-09-20). Training loss did NOT visibly fall
   (single-step readings stay in about 0.19-0.50 from step 196 to 300); only validation loss fell (0.633,
@@ -287,6 +286,47 @@ Accepted for the prototype, not defects to fix now:
 ---
 
 ## History
+
+### 2026-09-22 — Three fixes from the live session: yes/no detector, honest free-form model, no scripted change on real images
+
+The owner chose the three fixes first and the full-epoch retrain in the next prompt, (b) as a rejection, limited to
+live-model mode, and let me restart the servers.
+
+- **(a) Yes/no detector** (`ml/serve_vqa.py` `question_kind`). "Do"/"Did" openers count as yes/no only when the sentence
+  ends with "?"; a description request ("Can you describe...", any sentence containing "analysis") is free-form. Checked
+  against every labelled question in `data/b1_v2` (11,870 binary, 10,288 mcq): none changed kind. "Is there a river
+  passing through" (no "?") stays binary. The wrong "trained only on yes/no and a-d" text in `vqa_caption.py` and
+  `confidence_scorer.py` now says the adapter also saw a small share of BigEarthNet captions and that descriptions are
+  unevaluated.
+- **(b) `no_trained_model` rejection.** New `RejectionReasonCode`, mirrored in `satquery.ts`, the registry and
+  `RejectionState.tsx` ("No Trained Model for This Task Yet"). `CompatibilityValidator` step 8 rejects grounding, change
+  and fusion when `SATQUERY_VQA_MODEL_URL` is set and any input is not a demo input. `ImageMetadata.demo_input` (never
+  serialised) is set from the ten demo file names (`metadata_service.DEMO_INPUT_NAMES`, tested against
+  `mockScenarios.ts`) or the `DEMO_NOTE` tag. It runs after the structural checks, so `modality_mismatch` and overlap
+  still win. With the URL unset nothing changes, so the parity tests and snapshot are untouched.
+- **(c) Base model against the adapter** (`ml/b5_freeform_compare.py`, `data/b5_eval/freeform_compare.json`; 5 patches
+  x 3 prompts x 2 models, all 30 replies read by hand). The adapter named a country in 7 of 15 replies, and every one was
+  wrong ("Finland" for Ireland, Lithuania and Portugal; "Serbia" for Portugal), a season in 7 (6 wrong), and called
+  Serbian farmland "a large, complex building". The base model named no country or season in 15 replies. It gives generic
+  but plausible descriptions ("rural landscape, green and brown patches"), and also invents: buildings on a farmland
+  patch, "a mountainous region ... night" for the Portuguese patch. The 64-token limit cut 13 of the base model's 15 replies and 12 of the
+  adapter's 15 mid-sentence, so the limit is now 128 (the live check's description ended cleanly; longer ones may still
+  be cut). **Decision:** free-form goes to the base model by default
+  (`--free-form base`; `--free-form adapter` restores the old behaviour), labelled as such in the answer, trace and
+  `source_specialist`. Five patches are a spot check, not an evaluation.
+- **Tests:** 203 pytest (8 new), 73 Vitest (1 new), `tsc` and the build clean, lint shows the 2 known warnings.
+- **Browser (Chromium, real stack):** "Do change anaylisis" on a real patch in both slots shows the rejection card, no
+  scripted report; the first sample question still answers "No, 78%" and matches the BigEarthNet reference; "Do
+  Descriptive analysis" returns a base-model description with the note. No console errors.
+- **Housekeeping:** the three `*.aux.xml` sidecars were deleted. My check posted two sessions into the owner's database
+  (see Open item 0). All servers I started were stopped; the GPU shows only the desktop's ~1 GB.
+- Files (uncommitted): `ml/serve_vqa.py`, `ml/b5_freeform_compare.py`, `backend/app/{api/routes_system.py,
+  orchestrator/{compatibility_validator,confidence_scorer,specialist_router}.py,schemas/{image_metadata,validation}.py,
+  services/metadata_service.py,specialists/vqa_caption.py}`, `frontend/src/{types/satquery.ts,components/
+  RejectionState.tsx,components/RejectionState.test.tsx}`, `tests/{test_ml,test_real_model}.py`,
+  `docs/{PROGRESS_LOG,STARTUP_GUIDE,HANDOFF_PROMPT}.md`, `CLAUDE.md`.
+- Log corrections: the test counts for `tests/test_ml.py` (21/18/12) are now 22 everywhere, the stale single-sample
+  sentence in the live-model row is gone, and the handoff's last-commit reference was wrong (`f7eed5e`, not `7b08e79`).
 
 ### 2026-09-22 — Owner's live session reviewed; wrong training claim corrected; handover written (no code changed)
 

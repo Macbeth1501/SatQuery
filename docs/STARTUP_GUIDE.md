@@ -96,7 +96,7 @@ before **Run Agentic Analysis**.
 "Reading file…", then what the file actually says (CRS, GSD, bands, date, modality). A TIFF gets a preview the
 browser can display. If the backend is down, the fields stay "unknown"; nothing is guessed. The model will answer a
 yes/no or a-d question about any optical image, but only these samples have reference answers, and the model was
-trained only on 120×120 px Sentinel-2 patches.
+trained only on 120×120 px Sentinel-2 patches (its answers on other imagery are untested).
 
 **The five images** (all on Sentinel tiles never seen in training; measured in the browser 2026-09-21, 23 of 23 correct):
 
@@ -124,14 +124,17 @@ purpose, because no model answer is rated High. What to show on the Results page
 **What to ask, and what not to (from the owner's live session, 2026-09-22):**
 - **Good new questions:** yes/no or a-d questions about land cover, e.g. "Is there forest in this image?", "Is most of
   the image farmland?", "Is this image from Ireland?". Expect probabilities mostly between 50 and 70%.
-- **Avoid "Describe the image"** and similar. The adapter did learn BigEarthNet's caption template, but it fills in
-  country, season and climate from memory. It said "Finland, spring" for the Irish November patch and described a
-  "large, complex building" on Serbian farmland. The note under such answers wrongly says the model was never trained on
-  descriptions; that note is a known bug.
-- **Avoid commands starting with "Do"** ("Do descriptive analysis"). A bug reads them as yes/no and answers "No".
-- **Do not run change or fusion on the real patches.** Only single-image questions go to the model. Change, fusion and
-  grounding still come from the demo engine, which returns scripted text rated High even for real images. The A-G
-  scenarios are fine to show as scripted demos.
+- **"Describe the image" now goes to the base model** (fixed 2026-09-22). The trained adapter fills BigEarthNet's caption
+  template from memory ("Finland, spring" for the Irish November patch, a "large, complex building" on Serbian
+  farmland), so the server answers free-form questions with the adapter switched off (`--free-form base`, the
+  default). The base model names no country or season, but it was not trained on satellite imagery and can still
+  describe things that are not there ("buildings", "a mountainous region"). The note under the answer says which model
+  answered and that the reply is unevaluated. Yes/no and a-d questions are still answered by the adapter.
+- **Commands starting with "Do"** ("Do descriptive analysis") are now free-form, not yes/no. A "Do ...?" question that
+  ends with "?" is still yes/no.
+- **Change, fusion and grounding on your own images are refused** while the live model is on: the page shows "No
+  Trained Model for This Task Yet" (code `no_trained_model`). Only single-image questions have a real model. The A-G
+  scenarios still show their scripted answers.
 
 **If the model server is down**, the backend returns 503 and the page shows a red "No answer" box. On this path
 there is no fallback to demo data. Without `SATQUERY_VQA_MODEL_URL` the backend answers the sample from the demo
@@ -219,8 +222,8 @@ Tick each box; the expected result is beside it.
   `Live backend call unfulfilled, falling back to client-side scenario`
 
 **Optional, from the repo root**
-- [ ] `python -m pytest` gives 195 passed (set `PROJ_DATA` and `PROJ_LIB`, see section 9)
-- [ ] From `frontend/`: `npm test` (72 passed), `npm run build`, `npm run lint` (two known warnings)
+- [ ] `python -m pytest` gives 203 passed (set `PROJ_DATA` and `PROJ_LIB`, see section 9)
+- [ ] From `frontend/`: `npm test` (73 passed), `npm run build`, `npm run lint` (two known warnings)
 
 ## 8. Known rough edges (avoid or pre-empt)
 
