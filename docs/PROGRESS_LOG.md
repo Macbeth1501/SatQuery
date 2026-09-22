@@ -68,17 +68,15 @@ fusion query, returning HTTP 200 with a full trace rather than an error.
 
 ## Next step
 
-**Newest (2026-09-22): run 3 (full epoch, captions without country/season/climate) is training.** The owner approved
-removing those facts from the caption targets first, and restarted the PC to free the GPU (468 MiB used before launch).
-Data: `data/b1_v3` (built by `ml/b1_v3.py`, see History). Command, from the repo root:
+**Newest (2026-09-22): run 3 paused by the owner at step 560/1218; resume when told.** Trained cleanly to step 560
+(0 non-finite steps, peak 2,907 MiB, mean loss fell from 0.917 at step 100 to about 0.49 by step 500 then flattened, as
+run 2 did). Validation: loss 0.559/0.511, choice accuracy 42.4%/43.5% at steps 200/400 (n=92; run 2 was 0.545/41.3% at
+step 200, not directly comparable since the captions differ). Last saved state is `state_step500.pt`; resume with
 `.venv-ml/Scripts/python.exe ml/b5_train_lora.py --data data/b1_v3 --out data/b5_run3 --size 448 --epochs 1.0
---grad-accum 16 --eval-every 200 --eval-n 100 --save-every 100` (log `data/b5_run3_train.log`), 1,218 steps, expected
-about 7 h at run 2's 20.6 s/step. **The GPU is busy until it ends, so the live demo cannot run.** If it dies, rerun the
-same command with `--resume data/b5_run3` (never exercised on the real model). **Then:** score run 3 on `bench_hard` main
-and held-out in the six-run matrix and judge it only by its paired lead over the text-only model (`b5_compare.py`),
-against run 2's +6.1/+8.6 main and -0.5/+8.6 held-out; check the 23 sample answers with `--adapter
-data/b5_run3/adapter_final`; and re-run `ml/b5_freeform_compare.py` with the new adapter to see whether it describes
-without invented facts. After that: security items 1.1-1.3, then B6, B7, B3/C1 and fusion.
+--grad-accum 16 --eval-every 200 --eval-n 100 --save-every 100 --resume data/b5_run3`, which restarts at step 500 (60
+steps re-trained). Not yet exercised on the real model; watch the first resumed steps for a loss spike or crash. GPU is
+free (315 MiB used). After it finishes: score on `bench_hard` (main + held-out) against run 2's leads (+6.1/+8.6 main,
+-0.5/+8.6 held-out), check the 23 sample answers, and re-run `ml/b5_freeform_compare.py`.
 
 **Earlier (2026-09-21): five live-model samples; upload metadata read from the file.** Demo-ready: follow
 `docs/STARTUP_GUIDE.md` §3a.
@@ -290,6 +288,32 @@ Accepted for the prototype, not defects to fix now:
 ---
 
 ## History
+
+### 2026-09-22 — Run 3 paused at step 560/1218 by the owner; a genuine mid-run stall found and logged
+
+The owner restarted the PC to free the GPU (confirmed 468 MiB used before launch, well under the ~3,100 MiB bar), then
+asked to drop country, season and climate from the caption targets and train a full epoch (see the entry below for
+`data/b1_v3` and the launch). Progress was watched with a 100-step polling script printing to a Monitor.
+
+**Trained cleanly to step 560** (46% of the epoch): 0 non-finite steps throughout, mean training loss fell from 0.917
+(steps 1-100) to about 0.49 by step 500 and then flattened, matching run 2's pattern. Validation: loss 0.559/0.511,
+choice accuracy 42.4%/43.5% at steps 200/400 (n=92 each; run 2 was 0.545/41.3% at step 200 — not directly comparable,
+since the caption text itself differs between the two runs' training data).
+
+**One real anomaly, not a fault of the run:** step 552→553 is logged 2 h 39 min apart, against a normal ~19-24 s/step
+(`train_log.jsonl`'s `t` field is wall-clock `time.time()`, confirmed by reading `b5_train_lora.py`, so this reflects
+real elapsed time, not GPU slowness). The most likely cause is the machine sleeping mid-training; nothing in the loss or
+memory readings right after suggests corruption. Flagged for the next session to disable sleep/hibernate before
+resuming or starting any further GPU run.
+
+The owner then asked to pause training (to be resumed in a later session), not to stop it as a failure. It was stopped
+cleanly at step 560; the last saved checkpoint is `state_step500.pt` (`--save-every 100`), so resuming re-trains 60
+steps. `--resume` has still never been exercised on the real 4-bit model — only on a toy model in tests — so the first
+resumed steps need watching. GPU freed to 315 MiB (later 481 MiB with desktop background use) after stopping.
+
+Docs: `docs/PROGRESS_LOG.md` (this entry, "Next step"), `docs/HANDOFF_PROMPT.md` (rewritten as the full handover for the
+resume). No commit needed from the code side — only `ml/b1_v3.py` and its tests, already committed in the entry below,
+changed; this entry and the handoff are the only uncommitted paths this session leaves behind.
 
 ### 2026-09-22 — `data/b1_v3`: caption targets without country, season or climate; run 3 started
 
