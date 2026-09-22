@@ -65,7 +65,10 @@ terminals, all from the repo root except the frontend.
 .venv-ml/Scripts/python.exe ml/serve_vqa.py --adapter data/b5_run2/adapter_final --port 8001
 ```
 
-Wait for `Uvicorn running on http://127.0.0.1:8001`. `http://127.0.0.1:8001/health` names the model, revision and adapter.
+Wait for `Uvicorn running on http://127.0.0.1:8001`. `http://127.0.0.1:8001/health` names the model, revision and adapter,
+and `/adapters` lists the resident adapters. This command loads run 2 alone, named `run2`, which is what the
+backend asks for by default (`SATQUERY_VQA_MODEL_ADAPTER=run2`). Leaving out `--adapter` loads run 2 and run 3
+together; the live demo still uses run 2 by owner decision.
 
 **Terminal 2, backend with the model switched on** (PowerShell):
 

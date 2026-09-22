@@ -106,6 +106,9 @@ HIGH_INTENT_CONFIDENCE = _env_float("HIGH_INTENT_CONFIDENCE", 0.85, 0.0, 1.0)
 # Read as `config.VQA_MODEL_URL` at call time, so tests can switch it on and off.
 VQA_MODEL_URL = _raw("VQA_MODEL_URL")
 VQA_MODEL_TIMEOUT_SECONDS = _env_float("VQA_MODEL_TIMEOUT_SECONDS", 60.0, 1.0, 600.0)
+# Which resident adapter the model server answers with (its GET /adapters lists them). run2 is
+# the live demo's adapter by owner decision (2026-09-22); run3 is the scored model of record.
+VQA_MODEL_ADAPTER = _env_str("VQA_MODEL_ADAPTER", "run2")
 # The model's own answer probability at or above this gives Medium; below it, Low. A real
 # model answer is never High: run 2 scores ~33% on held-out multiple choice (chance 25%).
 MODEL_MEDIUM_PROBABILITY = _env_float("MODEL_MEDIUM_PROBABILITY", 0.75, 0.0, 1.0)

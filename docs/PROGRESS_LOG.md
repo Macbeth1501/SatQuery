@@ -35,10 +35,10 @@ inference layer is stubbed.
 | Pillow bounding-box and change-mask overlays | Complete |
 | Session persistence | Complete — SQLite (see the datastore row below); legacy `response.json` files are imported on first read |
 | React frontend, 3 routes, 15 components | Complete, verified in-browser |
-| Test suite: 207 pytest + 73 Vitest tests | All passing (26 in `tests/test_ml.py`, some of which skip when scikit-learn, scipy or torch are missing; `tests/test_real_model.py` and `tests/test_inspect.py` need no GPU) |
+| Test suite: 213 pytest + 73 Vitest tests | All passing (29 in `tests/test_ml.py`, some of which skip when scikit-learn, scipy or torch are missing; `tests/test_real_model.py` and `tests/test_inspect.py` need no GPU) |
 | Demo inputs | Seven georeferenced GeoTIFFs in `frontend/public/demo/` (scenarios A, C, D, E, and G which reuses C's pair reversed); B and F stay plain PNGs on purpose. Georeferencing is real, the pictures are synthetic |
 | ML training side (`ml/`) | B1 thin slice built and verified; B5 LoRA train/eval/notebook written; baseline evaluated; **run 1 (old leaky slice, `data/b5_run1/adapter_final`) showed no evidence of image reading; run 2 (leak-neutral `data/b1_v2`, 300 steps in 1 h 43 min, `data/b5_run2/adapter_final`) passes the pre-registered test on `bench_hard` main (+6.1 binary, +8.6 mcq over text-only) but its binary lead is gone on held-out tiles (held-out mcq keeps +8.6); run 3 (`data/b1_v3`, captions without country/season/climate, full epoch, 1,218 steps, `data/b5_run3/adapter_final`) scored 2026-09-22: beats run 2 on every pre-registered measure and, unlike run 2, its binary lead generalises to held-out tiles (+9.4 vs run 2's -0.5); free-form no longer names a country/season, but on the 5 curated live-demo cards it scores 13/23 vs run 2's 23/23 (those cards were picked because run 2 got them right, so this is expected on a biased sample, not a regression on the real bench). **Owner decided (2026-09-22) not to swap it into the live demo — cherry-picking new cards for run 3 would repeat the same bias, not fix it. Run 2 stays live; run 3 is the model of record for bench_hard numbers.** Not wired into the backend otherwise. `tests/test_ml.py` (26 tests) covers the CPU-side pieces (option parser, text-only baseline, raking, sampler, McNemar, answer parser, change rate, resumable training state on a toy model); training, extraction and GPU evaluation have no automated tests |
-| **Specialist inference** | **Dummy — `ScenarioEngine` lookup — except single-image VQA/captioning when `SATQUERY_VQA_MODEL_URL` is set: real adapter over HTTP (`ml/serve_vqa.py`), verified live 2026-09-21** |
+| **Specialist inference** | **Dummy — `ScenarioEngine` lookup — except single-image VQA/captioning when `SATQUERY_VQA_MODEL_URL` is set: real adapter over HTTP (`ml/serve_vqa.py`), verified live 2026-09-21. Since 2026-09-22 (B2) the server keeps several adapters resident (run 2 and run 3 by default) and the backend names one with `SATQUERY_VQA_MODEL_ADAPTER` (default `run2`) through `POST /infer`** |
 | Live-model demo | Green row of the preset bar on `/analyze`: five real BigEarthNet Sentinel-2 patches (Ireland ×2, Lithuania, Serbia, Portugal; tiles never seen in training), 23 questions, 23 of 23 correct in the browser, 2 rated Medium and 21 Low. A card, or uploading the file by hand, loads the GeoTIFF into Image 1 and the query chips become its questions. Free-form questions are answered by the base model with the adapter off (2026-09-22). Grounding, change and fusion on non-demo images are refused as `no_trained_model` while the live model is on |
 | **Optical/SAR fusion** | **Dummy — hardcoded region tags** |
 | Raster metadata extraction | Read from the file (CRS, bands, GSD, footprint, NoData, timestamp). Also exposed before analysis as `POST /v1/inspect`, which fills the upload card and renders a PNG preview (TIFFs included) |
@@ -68,7 +68,13 @@ fusion query, returning HTTP 200 with a full trace rather than an error.
 
 ## Next step
 
-**Newest (2026-09-22, late): the plan for the 10 remaining ML capabilities is written and approved —
+**Newest (2026-09-22, B2 done): Phase 0, B2 is done and passed its gate (G-B2); B1's 10k-patch disk measurement
+is done (about 96 GiB for the full pool, which fits). Next, still Phase 0 of `docs/ML_PLAN.md`: B4 (modality
+heuristic), the B8 domain-gap function and C0 (scenario-engine calls off the real-model paths). B1's full
+ingestion can start in the background alongside them once `ml/b1_full.py` gains the split, the cloud cap, the box
+rows and a decision on the 7.2% of S1 patches with no BigEarthNet.txt row (see the History entry).**
+
+(Superseded, 2026-09-22, late:) the plan for the 10 remaining ML capabilities is written and approved —
 `docs/ML_PLAN.md`. Next step: Phase 0, B2: extend `ml/serve_vqa.py` so run 2 and run 3 stay loaded together, with
 `/health`, `/adapters`, `/infer` and a back-to-back latency test. In parallel, measure B1's disk use on the first 10k
 patches. Nothing in the plan has started. Training runs go to free Kaggle when a 20-step timing test shows it is
@@ -337,6 +343,64 @@ Accepted for the prototype, not defects to fix now:
 ---
 
 ## History
+
+### 2026-09-22 — B2: multi-adapter serving done and its gate passed; B1 disk use measured on 10k patches
+
+**B2 (ML_PLAN phase 0).** `ml/serve_vqa.py` was extended, not rewritten, and its measured decoding is unchanged
+(the answer distribution from the first `generate` step, float32 candidate logits, no forward pass after
+`generate`). Changes:
+- Every `--adapter` given stays resident on the one 4-bit backbone as a named PEFT adapter; a request picks one
+  with `set_adapter`, and `base` switches all of them off. With no `--adapter`, run 2 and run 3 both load, run 2
+  first as the default. A bare path is named after its run folder (`data/b5_run2/adapter_final` -> `run2`), so the
+  startup guide's command is unchanged.
+- New `GET /adapters` and `POST /infer` (`adapter`, plus a task token `vqa|caption|ground|change|fusion`). A task
+  the adapter was not trained for is a 422, and an adapter that is not loaded is a 400. `/health` now lists the
+  resident adapters and reports GPU memory. `/vqa` is kept for older callers.
+- Task tokens are one shared helper in `ml/b5_common.py` (`task_token`, `with_task_token`, `adapter_manifest`).
+  Run 2 and run 3 were trained without a token, so the token is checked against the adapter's tasks but not
+  written into their prompts. Future adapters declare their tasks and token use in a `satquery_adapter.json`.
+- Two bugs fixed on the way. The `lm_head` hook was registered outside the lock, so overlapping requests could
+  read each other's hidden state; the lock now covers the hook, the adapter switch and `generate`. And a yes/no
+  answer from the base model was marked `trained_format: true`; only an adapter answer is now.
+- Backend: `model_client.ask_vqa` posts to `/infer` with `SATQUERY_VQA_MODEL_ADAPTER` (new, default `run2`) and
+  the task (`caption` for `single_caption`, else `vqa`). 3 backend tests pin the request body, the default and
+  the 422 path; 3 in `tests/test_ml.py` cover adapter naming, task tokens and manifests. 213 pytest pass (207
+  before). Frontend untouched.
+
+**Verification** (files in `data/b2_eval/`, produced by the new `ml/b2_check.py`):
+- Run 2's 23 live-demo answers from the old single-adapter server (`before_run2.json`, repeatable: a second pass
+  diffed identical) against the new server with run 3 also resident: **0 of 23 changed** in answer, full
+  distribution or raw reply, both as the default and named (`after_default.json`, `after_run2.json`), and again
+  after switching to run 3 and back (`after_run2_postswitch.json`).
+- The switch is real: through the same server, run 3 answered 13 of 23, its known score on these cards
+  (`after_run3.json`). A switch that did nothing would have given 23 of 23.
+- **G-B2 latency** (`latency.json`, 8 rounds, medians of the server's generation time): run2->run3 426.8 ms vs
+  run3->run3 426.3 ms; base->run2 438.1 vs run2->run2 433.1. No spike on switching between adapters. Switching to
+  base: 738.7 vs base->base 663.9 (+11%), inside base->base's own range (max 839 ms). Base is slower in general
+  because it writes 8 tokens of prose where an adapter stops after "no". Base is not a demo path.
+- VRAM with both adapters: 1,632 MiB reserved by the server process; 3,072 of 4,096 MiB used on the card
+  including the desktop, about what run 2 alone used before.
+- Browser check (Playwright/Chromium in a scratchpad venv, three-terminal stack with the startup guide's exact
+  command): **23 of 23 correct**, every answer from `b5_run2_lora`, and all 23 requests reached the server as
+  `POST /infer` (`live_check_run2.json`).
+
+**B1 disk measurement (ML_PLAN phase 1 prerequisite).** New `ml/b1_full.py` streams a `.tar.zst` archive
+straight into LMDB (S2: B04/B03/B02/B08 `uint16`; S1: VV/VH `float16`; 120x120, keyed by S2 patch id, with S1
+joined through `s1_name`, which `BigEarthNet.txt.parquet` carries, so no other metadata is needed). `measure` ran
+on the first 10,000 patches of each archive (`ml/b1_full_measure_{s2,s1}.json`):
+
+| | bytes/patch in LMDB | rate | projected pool | projected time |
+|---|---|---|---|---|
+| S2 | 118,860 (raw 115,200) | 80 patches/s | 64.4 GiB | 2.0 h |
+| S1 | 61,571 (raw 57,600) | 179 patches/s | 31.4 GiB | 0.9 h |
+
+About 96 GiB in total, 13 GiB above the plan's estimate (55 + 27), with 209 GB free, so it fits. The projections
+scale by compressed bytes read and assume the first patches are typical; they are not measurements. **Finding:
+722 of the 10,000 S1 patches (7.2%) have no BigEarthNet.txt row.** They were stored under an `s1:` key, not
+dropped. The full run must decide whether to keep them (for B9's S1/S2 pairs) or drop them (no annotations). Still
+missing from `b1_full.py` for the full run: the official split with the 2-cell buffer, the 5% cloud cap and its
+report, and the box rows. The scratch store `data/b1_full_measure/` (1.8 GB) can be deleted. `lmdb==2.3.0` was
+installed into `.venv-ml` and added to `tools/requirements-ml.txt`. AC/DC sleep was disabled first.
 
 ### 2026-09-22 — Plan for the 10 remaining ML capabilities approved (no code changed)
 

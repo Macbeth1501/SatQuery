@@ -22,6 +22,41 @@ REVISION = "895c3a49bc3fa70a340399125c650a463535e71c"  # read from the Hub and d
 LORA_TARGETS = ["q_proj", "k_proj", "v_proj", "o_proj"]
 END_OF_TURN = "<|im_end|>"
 
+# Task tokens (Development Plan M1): every request to the model server names one, and so will every adapter
+# trained from here on. Run 2 and run 3 were trained with no token in the prompt, so for them the token is
+# checked against what the adapter was trained for but never written into the prompt: adding it would feed
+# them an input they never saw. An adapter trained with the token says so in its manifest.
+TASK_TOKENS = ("vqa", "caption", "ground", "change", "fusion")
+ADAPTER_MANIFEST = "satquery_adapter.json"
+# What an adapter folder without a manifest is: a B5 VQA/caption adapter like run 2 and run 3.
+B5_MANIFEST = {"tasks": ["vqa", "caption"], "task_token_in_prompt": False}
+
+
+def task_token(task):
+    """'[vqa]' for 'vqa'; anything outside TASK_TOKENS is an error, not a new task."""
+    if task not in TASK_TOKENS:
+        raise ValueError(f"unknown task {task!r}; expected one of {', '.join(TASK_TOKENS)}")
+    return f"[{task}]"
+
+
+def with_task_token(question, task, in_prompt):
+    """The question as the adapter was trained to see it: prefixed with the task token only if it was trained
+    with one. The token is validated either way."""
+    token = task_token(task)
+    return f"{token} {question}" if in_prompt else question
+
+
+def adapter_manifest(adapter_dir):
+    """Which tasks an adapter serves and whether its prompts carry the task token, from satquery_adapter.json
+    in its folder; a folder without one is a B5 adapter (B5_MANIFEST)."""
+    path = Path(adapter_dir) / ADAPTER_MANIFEST
+    if not path.is_file():
+        return dict(B5_MANIFEST)
+    manifest = {**B5_MANIFEST, **json.loads(path.read_text(encoding="utf-8"))}
+    for task in manifest["tasks"]:
+        task_token(task)
+    return manifest
+
 
 def pick_dtype():
     """bfloat16 on Ampere or newer; float16 otherwise. A Kaggle T4 (compute capability 7.5) has no bf16."""

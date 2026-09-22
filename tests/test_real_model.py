@@ -43,8 +43,8 @@ def model_on(monkeypatch):
     calls = Calls()
     reply = {"value": fake_reply()}
 
-    async def fake_ask(image_path, question):
-        calls.append({"image_path": Path(image_path), "question": question})
+    async def fake_ask(image_path, question, task="vqa"):
+        calls.append({"image_path": Path(image_path), "question": question, "task": task})
         return reply["value"]
 
     def forbidden(*_args, **_kwargs):
@@ -85,6 +85,7 @@ def test_single_image_question_reaches_the_model_with_the_uploaded_file(client, 
     assert call["question"] == question
     assert call["image_path"].is_file()
     assert call["image_path"].read_bytes() == RASTER  # the upload itself, not a stand-in
+    assert call["task"] == "vqa"
     assert body["answerText"].startswith("No")
     assert body["rejected"] is False
 
@@ -120,6 +121,7 @@ def test_free_form_reply_is_low_and_says_it_is_unevaluated(client, model_on):
                                          answer_text="Farmland with hedgerows.")
     body = ask(client, "Describe the land-cover in this image.")
     assert body["taskSpec"]["taskType"] == "single_caption"
+    assert model_on[0]["task"] == "caption"  # the task token the server checks against the adapter
     assert body["confidence"]["tier"] == "Low"
     assert "have not been evaluated" in body["answerText"]
     # the adapter did see captions (1,431 of 19,489 training examples); the old note denied it
@@ -157,7 +159,7 @@ def test_other_tasks_on_demo_inputs_stay_on_the_demo_engine(client, monkeypatch)
     """Only single-image questions go to the model; the demo pair still gets its scripted change report."""
     calls = []
 
-    async def fake_ask(image_path, question):
+    async def fake_ask(image_path, question, task="vqa"):
         calls.append(question)
         return fake_reply()
 
@@ -226,7 +228,7 @@ def test_unreachable_model_is_a_503_not_a_demo_answer(client, monkeypatch):
 
 
 def test_unusable_model_reply_is_a_502(client, monkeypatch):
-    async def broken(image_path, question):
+    async def broken(image_path, question, task="vqa"):
         raise model_client.ModelError("Model server reply is missing answer.")
 
     monkeypatch.setattr(config, "VQA_MODEL_URL", "http://model.invalid")
@@ -236,7 +238,7 @@ def test_unusable_model_reply_is_a_502(client, monkeypatch):
 
 
 def test_switch_off_keeps_the_demo_engine(client, monkeypatch):
-    async def must_not_run(image_path, question):
+    async def must_not_run(image_path, question, task="vqa"):
         raise AssertionError("model called while SATQUERY_VQA_MODEL_URL is unset")
 
     monkeypatch.setattr(config, "VQA_MODEL_URL", None)
@@ -244,6 +246,52 @@ def test_switch_off_keeps_the_demo_engine(client, monkeypatch):
     body = ask(client, SAMPLE["questions"][0]["question"])
     assert body["rejected"] is False
     assert body["confidence"]["tier"] in {"High", "Medium", "Low"}
+
+
+def model_server(monkeypatch, status=200, body=None):
+    """Points model_client at an in-process fake server (httpx.MockTransport); returns the requests it got."""
+    import httpx
+
+    seen = []
+
+    def handler(request):
+        seen.append({"path": request.url.path, "json": json.loads(request.content)})
+        return httpx.Response(status, json=body if body is not None else fake_reply())
+
+    real_client = httpx.AsyncClient
+
+    def client_with_mock(**kwargs):
+        return real_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(config, "VQA_MODEL_URL", "http://model.invalid")
+    monkeypatch.setattr(model_client.httpx, "AsyncClient", client_with_mock)
+    return seen
+
+
+def test_client_asks_infer_with_the_configured_adapter_and_task(monkeypatch, tmp_path):
+    import asyncio
+
+    seen = model_server(monkeypatch)
+    monkeypatch.setattr(config, "VQA_MODEL_ADAPTER", "run3")
+    image = tmp_path / "x.tif"
+    image.write_bytes(b"x")
+    asyncio.run(model_client.ask_vqa(image, "Is there water?", task="caption"))
+    assert seen == [{"path": "/infer", "json": {"image_path": str(image.resolve()), "question": "Is there water?",
+                                                "task": "caption", "adapter": "run3"}}]
+
+
+def test_client_defaults_to_run2_the_live_demo_adapter():
+    assert config.VQA_MODEL_ADAPTER == "run2"
+
+
+def test_task_the_adapter_was_not_trained_for_is_a_model_error(monkeypatch, tmp_path):
+    import asyncio
+
+    model_server(monkeypatch, status=422, body={"detail": "adapter 'run2' was trained for vqa, caption, not ground"})
+    image = tmp_path / "x.tif"
+    image.write_bytes(b"x")
+    with pytest.raises(model_client.ModelError, match="422"):
+        asyncio.run(model_client.ask_vqa(image, "Where is the water?", task="ground"))
 
 
 @pytest.mark.parametrize("sample", SAMPLES, ids=[s["id"] for s in SAMPLES])

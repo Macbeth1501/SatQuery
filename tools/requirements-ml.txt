@@ -13,3 +13,5 @@ safetensors==0.8.0
 peft==0.21.0
 # ml/b1_slice.py and `ml/b5_eval.py prepare` also need pyarrow, rasterio, zstandard, numpy and pandas; the
 # --system-site-packages venv picks those up from the base Python. `ml/b5_eval.py run` does not need them.
+# ml/b1_full.py (the full B1 pool) writes LMDB; installed into .venv-ml on 2026-09-22.
+lmdb==2.3.0

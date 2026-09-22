@@ -1,0 +1,26 @@
+{
+  "modality": "s1",
+  "archive": "data\\BigEarthNet\\BigEarthNet-S1\\BigEarthNet-S1.tar.zst",
+  "archive_bytes": 54439153171,
+  "bands": [
+    "VV",
+    "VH"
+  ],
+  "dtype": "float16",
+  "patches_measured": 10000,
+  "stored_this_run": 10000,
+  "skipped_already_present": 0,
+  "s1_without_parquet_row": 722,
+  "array_bytes_per_patch": 57600.0,
+  "lmdb_used_bytes": 615710720,
+  "lmdb_bytes_per_patch": 61571.072,
+  "compressed_bytes_read": 993024200,
+  "archive_fraction_read": 0.018240992781074133,
+  "seconds_this_run": 56.0,
+  "patches_per_second_this_run": 178.5,
+  "projection_note": "assumes the first patches are typical of the whole archive; not a measurement",
+  "projected_patches_in_archive": 548216,
+  "projected_lmdb_gib": 31.4,
+  "projected_hours_single_process": 0.9,
+  "measured_on": "2026-09-22"
+}

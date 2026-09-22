@@ -64,7 +64,8 @@ class VqaCaptionSpecialist(BaseSpecialist):
         image_path = self._input_path(images, session_id)
         if image_path is None:
             raise model_client.ModelError("No uploaded image was found for this session.")
-        result = await model_client.ask_vqa(image_path, task_spec.question_text or "")
+        task = "caption" if task_spec.task_type == TaskType.SINGLE_CAPTION else "vqa"
+        result = await model_client.ask_vqa(image_path, task_spec.question_text or "", task=task)
 
         item = EvidenceItem(
             source_specialist=(

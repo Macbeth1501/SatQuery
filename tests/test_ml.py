@@ -312,6 +312,46 @@ def test_server_puts_the_option_text_back_beside_its_letter():
     assert S.answer_text("Describe it.", "free", "Farmland.") == "Farmland."
 
 
+def test_server_names_adapters_from_the_flag_or_the_run_folder():
+    assert S.parse_adapter_spec("run3=data/b5_run3/adapter_final") == ("run3", "data/b5_run3/adapter_final")
+    # a bare path, as docs/STARTUP_GUIDE.md passes it, must come out as the backend's default name, run2
+    assert S.parse_adapter_spec("data/b5_run2/adapter_final") == ("run2", "data/b5_run2/adapter_final")
+    assert S.parse_adapter_spec(r"run2=D:\Projects\SatQuery\data\b5_run2\adapter_final")[0] == "run2"
+    assert [S.parse_adapter_spec(s)[0] for s in S.DEFAULT_ADAPTERS] == ["run2", "run3"]  # run2 first: the default
+    with pytest.raises(ValueError):
+        S.parse_adapter_spec("base=data/b5_run2/adapter_final")  # reserved for the backbone with adapters off
+
+
+# ---- task tokens and adapter manifests (ml/b5_common.py, needs torch) -------------------------------------
+
+def test_task_token_is_checked_but_only_written_when_the_adapter_was_trained_with_it():
+    pytest.importorskip("torch")
+    import b5_common as B
+
+    assert B.task_token("ground") == "[ground]"
+    assert B.with_task_token("Where is the river?", "ground", in_prompt=True) == "[ground] Where is the river?"
+    # run 2 and run 3 never saw a token: their prompt must stay exactly as trained
+    assert B.with_task_token("Is there water?", "vqa", in_prompt=False) == "Is there water?"
+    with pytest.raises(ValueError):
+        B.task_token("segment")
+    with pytest.raises(ValueError):
+        B.with_task_token("Is there water?", "segment", in_prompt=False)
+
+
+def test_adapter_without_a_manifest_is_a_b5_vqa_caption_adapter(tmp_path):
+    pytest.importorskip("torch")
+    import json
+
+    import b5_common as B
+
+    assert B.adapter_manifest(tmp_path) == {"tasks": ["vqa", "caption"], "task_token_in_prompt": False}
+    (tmp_path / B.ADAPTER_MANIFEST).write_text(json.dumps({"tasks": ["ground"], "task_token_in_prompt": True}))
+    assert B.adapter_manifest(tmp_path) == {"tasks": ["ground"], "task_token_in_prompt": True}
+    (tmp_path / B.ADAPTER_MANIFEST).write_text(json.dumps({"tasks": ["segment"]}))
+    with pytest.raises(ValueError):
+        B.adapter_manifest(tmp_path)
+
+
 # ---- b1_v3: caption targets without country, season or climate (ml/b1_v3.py) -----------------------------
 
 CAPTION = (

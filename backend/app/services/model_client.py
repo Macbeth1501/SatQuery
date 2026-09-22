@@ -28,9 +28,17 @@ def is_enabled() -> bool:
     return bool(config.VQA_MODEL_URL)
 
 
-async def ask_vqa(image_path: Path, question: str) -> Dict[str, Any]:
-    url = config.VQA_MODEL_URL.rstrip("/") + "/vqa"
-    payload = {"image_path": str(Path(image_path).resolve()), "question": question}
+async def ask_vqa(image_path: Path, question: str, task: str = "vqa") -> Dict[str, Any]:
+    """`task` is the server's task token ("vqa" or "caption" on this path); the adapter is
+    config.VQA_MODEL_ADAPTER. A task the adapter was not trained for comes back as HTTP 422,
+    which surfaces as ModelError like any other unusable reply."""
+    url = config.VQA_MODEL_URL.rstrip("/") + "/infer"
+    payload = {
+        "image_path": str(Path(image_path).resolve()),
+        "question": question,
+        "task": task,
+        "adapter": config.VQA_MODEL_ADAPTER,
+    }
     try:
         async with httpx.AsyncClient(timeout=config.VQA_MODEL_TIMEOUT_SECONDS) as client:
             reply = await client.post(url, json=payload)
