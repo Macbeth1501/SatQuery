@@ -68,13 +68,14 @@ fusion query, returning HTTP 200 with a full trace rather than an error.
 
 ## Next step
 
-**Newest (2026-09-22): the run-3 thread is closed (decision below). Next session's actual task: plan, then
-implement, the 10 remaining ML capabilities (`docs/SatQuery_AI_Development_Plan.md` §10.5 Track B — B1 full-scale
-data pipeline, B2 full model serving, B3 real query interpreter, B4 modality detection, B6 grounding, B7 change
-detection, B8 domain-gap mitigation, B9 complementarity detector (the go/no-go gate), B10 fusion, B12 decoupled
-confidence). Only B5 (this adapter work) and B11 (the `bench_hard` eval harness) are done of the 12 Track-B modules.
-Full sequencing and per-item notes are in `docs/HANDOFF_PROMPT.md` §3 — start there with a plan, not code, per the
-owner's instruction.**
+**Newest (2026-09-22, late): the plan for the 10 remaining ML capabilities is written and approved —
+`docs/ML_PLAN.md`. Next step: Phase 0, B2: extend `ml/serve_vqa.py` so run 2 and run 3 stay loaded together, with
+`/health`, `/adapters`, `/infer` and a back-to-back latency test. In parallel, measure B1's disk use on the first 10k
+patches. Nothing in the plan has started. Training runs go to free Kaggle when a 20-step timing test shows it is
+faster, under the quota rules in the plan, while the laptop runs ingestion, evaluation and backup training.**
+
+(Superseded:) the run-3 thread is closed (decision below). Only B5 (this adapter work) and B11 (the `bench_hard`
+eval harness) are done of the 12 Track-B modules.
 
 Run 3 scored — it beats run 2 and, unlike run 2, generalises to held-out tiles. Owner decided not to swap it into
 the live demo (see below). Six-run `bench_hard` matrix (`data/b1_v2/
@@ -336,6 +337,23 @@ Accepted for the prototype, not defects to fix now:
 ---
 
 ## History
+
+### 2026-09-22 — Plan for the 10 remaining ML capabilities approved (no code changed)
+
+Following `docs/HANDOFF_PROMPT.md` §3, a plan covering B1-B4, B6-B10 and B12 was written and approved by the owner,
+and saved as `docs/ML_PLAN.md`. Owner decisions recorded there:
+- B9, the complementarity detector, gets an **early, time-boxed go/no-go test** (phase 2), no longer last.
+- B1 is a **full ingestion**: both `.tar.zst` archives are streamed into LMDB without unpacking.
+- B3 replaces the keyword interpreter only if it beats it by a significant paired margin on held-out queries.
+- **Compute: Kaggle and the laptop run in parallel.** GPU training (B6, B7, B9) goes to free Kaggle when a 20-step
+  timing test shows it is faster, budgeted to stay under the account's free limits (read from the account, not
+  assumed), with checkpoint/resume and a quota ledger kept in this log. The laptop runs ingestion, B4, B8,
+  evaluation and the demo, and trains overnight as backup. No paid plans.
+
+Order: phase 0 is B2, B4, the B8 function and C0; then B1, B9 go/no-go, B3, B6, B7, B10, the B8 ablations, and B12
+(stretch). Every trained piece is judged by a paired lead over a baseline without the image, on held-out data. Facts
+checked on disk for the plan: BigEarthNet S1/S2 archives are present (54.4 GB + 63.3 GB compressed) with 224 GB free.
+CDVQA, SOMA-1M and CMU-Data are not on disk.
 
 ### 2026-09-22 — Run 3 scored: beats run 2, generalises to held-out tiles; live-demo cards not yet swapped
 
