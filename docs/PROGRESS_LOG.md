@@ -37,7 +37,7 @@ inference layer is stubbed.
 | React frontend, 3 routes, 15 components | Complete, verified in-browser |
 | Test suite: 207 pytest + 73 Vitest tests | All passing (26 in `tests/test_ml.py`, some of which skip when scikit-learn, scipy or torch are missing; `tests/test_real_model.py` and `tests/test_inspect.py` need no GPU) |
 | Demo inputs | Seven georeferenced GeoTIFFs in `frontend/public/demo/` (scenarios A, C, D, E, and G which reuses C's pair reversed); B and F stay plain PNGs on purpose. Georeferencing is real, the pictures are synthetic |
-| ML training side (`ml/`) | B1 thin slice built and verified; B5 LoRA train/eval/notebook written; baseline evaluated; **run 1 (old leaky slice, `data/b5_run1/adapter_final`) showed no evidence of image reading; run 2 (leak-neutral `data/b1_v2`, 300 steps in 1 h 43 min, `data/b5_run2/adapter_final`) passes the pre-registered test on `bench_hard` main (+6.1 binary, +8.6 mcq over text-only) but its binary lead is gone on held-out tiles (held-out mcq keeps +8.6)**. Not wired into the backend. `tests/test_ml.py` (26 tests) covers the CPU-side pieces (option parser, text-only baseline, raking, sampler, McNemar, answer parser, change rate, resumable training state on a toy model); training, extraction and GPU evaluation have no automated tests |
+| ML training side (`ml/`) | B1 thin slice built and verified; B5 LoRA train/eval/notebook written; baseline evaluated; **run 1 (old leaky slice, `data/b5_run1/adapter_final`) showed no evidence of image reading; run 2 (leak-neutral `data/b1_v2`, 300 steps in 1 h 43 min, `data/b5_run2/adapter_final`) passes the pre-registered test on `bench_hard` main (+6.1 binary, +8.6 mcq over text-only) but its binary lead is gone on held-out tiles (held-out mcq keeps +8.6); run 3 (`data/b1_v3`, captions without country/season/climate, full epoch, 1,218 steps, `data/b5_run3/adapter_final`) scored 2026-09-22: beats run 2 on every pre-registered measure and, unlike run 2, its binary lead generalises to held-out tiles (+9.4 vs run 2's -0.5); free-form no longer names a country/season, but on the 5 curated live-demo cards it scores 13/23 vs run 2's 23/23 (those cards were picked because run 2 got them right, so this is expected on a biased sample, not a regression on the real bench). **Owner decided (2026-09-22) not to swap it into the live demo — cherry-picking new cards for run 3 would repeat the same bias, not fix it. Run 2 stays live; run 3 is the model of record for bench_hard numbers.** Not wired into the backend otherwise. `tests/test_ml.py` (26 tests) covers the CPU-side pieces (option parser, text-only baseline, raking, sampler, McNemar, answer parser, change rate, resumable training state on a toy model); training, extraction and GPU evaluation have no automated tests |
 | **Specialist inference** | **Dummy — `ScenarioEngine` lookup — except single-image VQA/captioning when `SATQUERY_VQA_MODEL_URL` is set: real adapter over HTTP (`ml/serve_vqa.py`), verified live 2026-09-21** |
 | Live-model demo | Green row of the preset bar on `/analyze`: five real BigEarthNet Sentinel-2 patches (Ireland ×2, Lithuania, Serbia, Portugal; tiles never seen in training), 23 questions, 23 of 23 correct in the browser, 2 rated Medium and 21 Low. A card, or uploading the file by hand, loads the GeoTIFF into Image 1 and the query chips become its questions. Free-form questions are answered by the base model with the adapter off (2026-09-22). Grounding, change and fusion on non-demo images are refused as `no_trained_model` while the live model is on |
 | **Optical/SAR fusion** | **Dummy — hardcoded region tags** |
@@ -68,15 +68,63 @@ fusion query, returning HTTP 200 with a full trace rather than an error.
 
 ## Next step
 
-**Newest (2026-09-22): run 3 paused by the owner at step 560/1218; resume when told.** Trained cleanly to step 560
-(0 non-finite steps, peak 2,907 MiB, mean loss fell from 0.917 at step 100 to about 0.49 by step 500 then flattened, as
-run 2 did). Validation: loss 0.559/0.511, choice accuracy 42.4%/43.5% at steps 200/400 (n=92; run 2 was 0.545/41.3% at
-step 200, not directly comparable since the captions differ). Last saved state is `state_step500.pt`; resume with
-`.venv-ml/Scripts/python.exe ml/b5_train_lora.py --data data/b1_v3 --out data/b5_run3 --size 448 --epochs 1.0
---grad-accum 16 --eval-every 200 --eval-n 100 --save-every 100 --resume data/b5_run3`, which restarts at step 500 (60
-steps re-trained). Not yet exercised on the real model; watch the first resumed steps for a loss spike or crash. GPU is
-free (315 MiB used). After it finishes: score on `bench_hard` (main + held-out) against run 2's leads (+6.1/+8.6 main,
--0.5/+8.6 held-out), check the 23 sample answers, and re-run `ml/b5_freeform_compare.py`.
+**Newest (2026-09-22): the run-3 thread is closed (decision below). Next session's actual task: plan, then
+implement, the 10 remaining ML capabilities (`docs/SatQuery_AI_Development_Plan.md` §10.5 Track B — B1 full-scale
+data pipeline, B2 full model serving, B3 real query interpreter, B4 modality detection, B6 grounding, B7 change
+detection, B8 domain-gap mitigation, B9 complementarity detector (the go/no-go gate), B10 fusion, B12 decoupled
+confidence). Only B5 (this adapter work) and B11 (the `bench_hard` eval harness) are done of the 12 Track-B modules.
+Full sequencing and per-item notes are in `docs/HANDOFF_PROMPT.md` §3 — start there with a plan, not code, per the
+owner's instruction.**
+
+Run 3 scored — it beats run 2 and, unlike run 2, generalises to held-out tiles. Owner decided not to swap it into
+the live demo (see below). Six-run `bench_hard` matrix (`data/b1_v2/
+bench_hard.jsonl`, the same bench run 2 used — `b1_v3` only rewrote caption targets, not the binary/mcq rows, so
+`data/b5_eval/textonly_run2_hard.json` was reused as-is for the text-only baseline rather than refitting):
+
+| | main binary | main mcq | heldout binary | heldout mcq |
+|---|---|---|---|---|
+| Real image | 63.4% | 41.2% | 60.0% | 41.7% |
+| Grey image | 48.9% | 24.7% | 49.9% | 22.3% |
+| Mismatched image | 49.6% | 29.8% | 49.6% | 29.6% |
+| **Lead over text-only** (paired, 95% CI, McNemar p) | **+14.2** (10.3-17.9), p=2.4e-12 | **+15.3** (10.3-19.9), p=4.7e-09 | **+9.4** (4.0-14.5), p=8e-4 | **+17.4** (12.1-22.1), p=6.1e-10 |
+| **Real minus grey** | **+14.5** (10.8-18.0), p=8.4e-14 | **+16.5** (11.7-20.9), p=6.8e-11 | **+10.0** (4.8-15.0), p=2.3e-4 | **+19.4** (14.6-23.5), p=1.3e-13 |
+| Answer change, real vs mismatched | 43.2% | 64.1% | 36.6% | 63.8% |
+| Answer change, real vs grey | 44.9% | 68.6% | 44.0% | 66.5% |
+
+Overall answer change vs mismatched: 50.7% main, 49.5% heldout (both well above the 25% floor; unlike run 2, binary
+alone also clears it here: 43.2% main, 36.6% heldout, vs run 2's 23.7% main which fell just short). Unreadable
+replies: 1 (main binary) and 1 (heldout mismatch binary), 0 elsewhere.
+
+**Against run 2** (+6.1/+8.6 main, -0.5/+8.6 held-out, real-minus-grey +7.2/+7.3 main and -1.2/+4.4 held-out): run 3
+**more than doubles every lead on main, and — the result that matters most — the held-out binary lead is now +9.4
+instead of vanishing (-0.5).** Held-out real-minus-grey binary is now +10.0 instead of negative (-1.2). Run 3 is the
+first adapter in this project whose binary lead generalises to tiles it never trained on.
+
+**Free-form quality (`ml/b5_freeform_compare.py --adapter data/b5_run3/adapter_final`, same 5 live-demo patches, 3
+prompts each, unevaluated spot check):** the `b1_v3` caption rewrite worked — the run 3 adapter named 0 countries and
+0 seasons across all 15 replies (run 2 named a country in 7 of 15, all wrong). Replies are still not fully reliable:
+one prompt ("What land cover is visible in this image?") got the one-word reply "mixed" from the adapter, and
+"Describe the image" replies state precise areas (e.g. "1,020,000 square meters" of arable land) that are not
+obviously consistent with the same sample's own mcq reference answer — the quantities look invented even though the
+country/season leak is gone. Still not evaluated at any scale; the base-model free-form default (`--free-form base`)
+is unaffected by this finding either way.
+
+**23 live-demo sample answers, checked in a real browser (Playwright/Chromium) with the three-terminal stack and
+`--adapter data/b5_run3/adapter_final`: 13 of 23 correct** (T29UPU_55_58 3/5, T29UPU_38_37 5/5, T34UEG_28_34 2/6,
+T34TCR_36_25 2/4, T29SND_42_38 1/3) — down from run 2's 23/23. **This is not a contradiction of the bench_hard
+result above.** These 5 samples were hand-picked in the 2026-09-21 session specifically because run 2 answered all
+23 correctly; they are a biased sample by construction, not a random one, so a different adapter regressing on them
+is expected even when it is genuinely stronger on the large, unbiased `bench_hard` set. Full per-question results in
+`data/b5_eval/live_check_run3.json`.
+
+**Owner decision made (2026-09-22): keep run 2 in the live demo; cite run 3's `bench_hard` numbers as the real
+trained/scored result.** Rejected option (b) — picking a new set of 5 patches run 3 happens to answer correctly —
+explicitly, on the same grounds the existing cards are already caveated for: selecting patches *because* a model
+gets them right is cherry-picking regardless of which model it's done for, and doing it again for run 3 would just
+move the same problem rather than fix it. `docs/STARTUP_GUIDE.md`, `CLAUDE.md` and the live demo keep run 2 and its
+adapter (`data/b5_run2/adapter_final`) unchanged. Run 3 remains the better-scored model of record
+(`data/b5_run3/adapter_final`, bench_hard numbers above) and is the one to build on for any future work, but it is
+not wired into the live-demo cards.
 
 **Earlier (2026-09-21): five live-model samples; upload metadata read from the file.** Demo-ready: follow
 `docs/STARTUP_GUIDE.md` §3a.
@@ -288,6 +336,63 @@ Accepted for the prototype, not defects to fix now:
 ---
 
 ## History
+
+### 2026-09-22 — Run 3 scored: beats run 2, generalises to held-out tiles; live-demo cards not yet swapped
+
+Six-run `bench_hard` matrix against `data/b1_v2/bench_hard.jsonl` (the same bench run 2 used) with
+`--adapter data/b5_run3/adapter_final`, text-only baseline reused from `data/b5_eval/textonly_run2_hard.json`
+(only caption targets differ between `b1_v2` and `b1_v3`; binary/mcq rows are identical, so the existing text-only
+fit still applies). Results, `ml/b5_compare.py` p-values, and the full table are in the "Next step" section above.
+
+**Headline: run 3 more than doubles every paired lead run 2 had on main, and its held-out binary lead is now +9.4
+(p=8e-4) instead of vanishing (run 2: -0.5, p=0.91).** This is the first adapter in the project whose binary
+generalisation holds. Real-minus-grey and the tertiary answer-change test both pass cleanly on both main and
+held-out, including binary alone (run 2's main binary tertiary result was a narrow fail at 23.7%, run 3's is 43.2%).
+
+`ml/b5_freeform_compare.py --adapter data/b5_run3/adapter_final` on the 5 live-demo patches: 0 of 15 replies name a
+country or season (run 2: 7 of 15, all wrong), confirming the `b1_v3` caption rewrite fixed the invention the
+2026-09-22 earlier session found. Replies are still not fully trustworthy — one reply was a bare "mixed", and stated
+area figures in longer replies do not obviously agree with the sample's own reference answer — so this remains an
+unevaluated spot check, not a pass/fail result, and the base-model free-form default is unaffected either way.
+
+The 23 live-demo sample questions were re-run through the real three-terminal stack (`ml/serve_vqa.py --adapter
+data/b5_run3/adapter_final`, backend with `SATQUERY_VQA_MODEL_URL` set, Vite) and driven by a headless
+Playwright/Chromium script (installed to a scratchpad venv) that clicked every sample card and every question chip
+and read the Results page's reference-check verdict. **13 of 23 correct**, down from run 2's 23/23 (per-sample:
+T29UPU_55_58 3/5, T29UPU_38_37 5/5, T34UEG_28_34 2/6, T34TCR_36_25 2/4, T29SND_42_38 1/3; full transcript in
+`data/b5_eval/live_check_run3.json`). This does not contradict the bench_hard result: these 5 patches were chosen in
+the 2026-09-21 session specifically because run 2 got all 23 right, so they are a biased sample, and a different,
+better-generalising adapter is not expected to reproduce a result that was itself selected for one specific adapter.
+
+**Owner decision (2026-09-22): do not swap `--adapter` to run 3 in the live demo.** Picking a new set of patches run
+3 gets right would repeat the same cherry-picking the current 5 cards are already caveated for, just for a different
+model — the owner rejected that trade explicitly. `docs/STARTUP_GUIDE.md`, `CLAUDE.md` and the live demo keep run 2.
+Run 3 is the model of record for `bench_hard` numbers going forward. Files (uncommitted):
+`data/b5_eval/run3_hard_{main,heldout}{,_blind,_mismatch}.json` and matching `.log` files,
+`data/b5_eval/freeform_compare_run3.json`, `data/b5_eval/live_check_run3.json`, `docs/PROGRESS_LOG.md`.
+
+### 2026-09-22 — Run 3 resumed from step 500 and finished all 1,218 steps
+
+Resumed with `.venv-ml/Scripts/python.exe ml/b5_train_lora.py --data data/b1_v3 --out data/b5_run3 --size 448
+--epochs 1.0 --grad-accum 16 --eval-every 200 --eval-n 100 --save-every 100 --resume data/b5_run3`. Before launch,
+the AC/DC sleep timeout (previously 3 h on AC, `0x2a30`) was set to 0 (never) with `powercfg /change
+standby-timeout-ac 0` and `-dc 0`, to rule out the machine-sleep stall seen at step 552→553 in the paused run.
+
+`--resume` had never been exercised on the real 4-bit model before (only on a toy model in tests). The first resumed
+step confirmed a correct resume, not an accidental restart: step 501 logged LR 0.000131, matching the already-decayed
+cosine schedule from step 500, not a fresh warmup ramp. Training then ran unattended to completion: 0 non-finite
+steps across the entire run (500 pre-pause + 718 resumed), no stall, exit code 0, peak memory 2,994 MiB.
+`adapter_final` saved to `data/b5_run3/adapter_final`.
+
+Validation choice accuracy (n=92 each): 42.4% (step 200) → 43.5% (400) → 51.1% (600) → 46.7% (800) → 47.8% (1000) →
+53.3% (1200). Validation loss: 0.559 → 0.511 → 0.491 → 0.493 → 0.496 → 0.491. This is validation accuracy during
+training, not the pre-registered `bench_hard` paired-lead test — **run 3 is not yet scored against run 2's benchmark
+leads (+6.1/+8.6 main, -0.5/+8.6 held-out) and must not be judged by these numbers alone.**
+
+GPU is free again. Next step (not started, needs the owner's go-ahead per the handoff's "ask before starting a new
+one" rule): score run 3 on the six-run `bench_hard` matrix, decide whether the existing text-only baseline
+(`data/b5_eval/textonly_run2_hard.json`) still applies, check the 23 live-demo sample answers, and re-run
+`ml/b5_freeform_compare.py` with the new adapter.
 
 ### 2026-09-22 — Run 3 paused at step 560/1218 by the owner; a genuine mid-run stall found and logged
 

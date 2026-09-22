@@ -1018,10 +1018,21 @@ and can run in parallel given enough GPUs.
 | **B3** | M2 | Query interpreter via few-shot prompting first, not fine-tuning (Appendix A #17). Constrain decoding to the `TaskSpec` JSON Schema so an out-of-enum `taskType` is structurally impossible. Build the exemplar set from the Problem Statement's own representative queries plus hand-written ambiguous cases. | Held-out accuracy meets the bar the team sets (Appendix A #18 — no target exists yet). |
 | **B4** | M9 | Modality heuristic: band count, wavelength tags, pixel-distribution statistics into logistic regression or a shallow tree. **Deliberately not a neural network.** Sub-100 ms, CPU-only. | Wired into A1's ambiguous-modality fallback. |
 | **B5** | M3 | VQA + captioning adapter. Frozen encoder and decoder, modality-specific projections for S1/S2, LoRA rank 8–16 on attention projections only. **Resolve Appendix A #12 here** — whether this adapter emits a structured LULC side-channel for fusion, or fusion parses its free text. Fusion cannot be built until this is decided. | VRSBench and RSVQA evaluated on held-out data, with the delta ablation run. |
-> **B5 note (2026-09-22):** run 2 was trained on 9,470 binary, 8,588 mcq and 1,431 captioning examples. Its captions
-> were never scored on unseen tiles, and in live use they invent country and season (the caption targets carry facts a
-> 120 px patch cannot show). Before scaling B5, remove those facts from the caption targets or evaluate captioning
-> separately. See `docs/PROGRESS_LOG.md` 2026-09-22.
+> **B5 note (2026-09-22, morning):** run 2 was trained on 9,470 binary, 8,588 mcq and 1,431 captioning examples. Its
+> captions were never scored on unseen tiles, and in live use they invent country and season (the caption targets
+> carry facts a 120 px patch cannot show). Before scaling B5, remove those facts from the caption targets or evaluate
+> captioning separately. See `docs/PROGRESS_LOG.md` 2026-09-22.
+>
+> **B5 status update (2026-09-22, night): run 3 done, and it fixes the caption-invention problem above.** Same
+> `data/b1_v2` binary/mcq rows, retrained on `data/b1_v3` (country/season/climate dropped from caption targets), a
+> full epoch (1,218 steps). Scored on `bench_hard`: beats run 2 on every pre-registered measure, and — unlike run
+> 2 — its binary lead generalises to held-out tiles (+9.4 vs run 2's -0.5). Free-form replies name 0 countries/
+> seasons across 15 spot-check replies (run 2: 7 of 15, all wrong). **Owner decided not to promote it into the live
+> demo**, since it scores worse on the 5 hand-picked demo cards (13/23 vs run 2's 23/23 — those cards were picked
+> because run 2 answers them correctly, so this is a biased-sample effect, not a real regression; re-picking cards
+> for run 3 would repeat the same cherry-picking). Run 2 stays live; run 3 is the model of record for `bench_hard`
+> citations and the adapter to extend for later Track B work. Still local-only (300/1,218 steps respectively); Kaggle
+> has not been used. `data/b5_run3/adapter_final`; details in `docs/PROGRESS_LOG.md` 2026-09-22.
 >
 > **B5 status update (2026-09-21):** two adapters were trained locally on the RTX 3050. Run 1 (old slice) showed no evidence of reading imagery; run 2 (leak-neutral `data/b1_v2`) passes the pre-registered test on `bench_hard` main but not for binary questions on held-out tiles (see `docs/PROGRESS_LOG.md`). It has still not run on Kaggle. Earlier note (2026-09-20): written, NOT yet run on Kaggle. `ml/b5_common.py`, `ml/b5_train_lora.py`, `ml/b5_eval.py`, `ml/b5_kaggle.ipynb`. The training loop ran locally for a few steps only. S2-only input; the S1/S2 modality-specific projections and the VRSBench/RSVQA evaluation named below are not done, and evaluation uses the BigEarthNet.txt `bench` sample instead.
 | **B6** | M4 | Grounding adapter, **separately tuned** — never joint-trained with VQA/captioning, per the documented multi-task collapse. Boxes as tokenized sequences, not a detection head. Multi-candidate output mandatory. | Acc@0.5 reported honestly; grounding results always paired with a confidence badge in any demo material. |
@@ -1030,6 +1041,11 @@ and can run in parallel given enough GPUs.
 | **B9** | M7 | Complementarity detector: SAR-DINO / RGB-DINO pair trained with InfoNCE. **The highest-risk deliverable in the system.** Communicate a go/no-go early so C3's rule-based fallback is flipped deliberately, with time to verify it — not discovered broken during demo prep. | Either trained and serving, or the fallback is verified end-to-end and **labelled as rule-based** in the demo and write-up. |
 | **B10** | M8 | Fusion composition: implement whichever structured-extraction format B5 decided; design the verbalizer template so every claim is attributed to the supplying modality; build a small internal eval set and label it non-standard. | The verbalizer provably never receives raw pixels. |
 | **B11** | M10 | Evaluation harness. The **fine-tuning delta ablation** — un-adapted backbone vs. trained adapter — as a committed, re-runnable script. This is the single most judge-legible proof that the mandatory adaptation requirement is met. Persist every run's output. | Every number in the write-up traces to a committed run. |
+> **B11 status: DONE (2026-09-21, exercised again 2026-09-22).** `ml/b5_eval.py` (adapter vs. blank-image vs.
+> mismatched-image runs), `ml/b5_compare.py` (paired McNemar delta against a text-only baseline, exact p-values and
+> Wilson CIs) and `ml/b5_change_rate.py` (answer-change rate) together implement the delta ablation this row asks
+> for. Every adapter trained so far (run 1, run 2, run 3) has been scored through this exact harness on `bench_hard`,
+> and every number cited for them in `docs/PROGRESS_LOG.md` traces to a committed result file under `data/b5_eval/`.
 | **B12** | M11 | *Stretch only.* Decoupled perception/reasoning confidence tokens, calibrated on a validation slice, never the test split. **Do not start until B1–B11 and Track A are demo-ready.** | Rule 4 in the confidence chain moves from fallback-only to functioning. |
 
 ---
