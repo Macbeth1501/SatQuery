@@ -113,6 +113,12 @@ VQA_MODEL_ADAPTER = _env_str("VQA_MODEL_ADAPTER", "run2")
 # model answer is never High: run 2 scores ~33% on held-out multiple choice (chance 25%).
 MODEL_MEDIUM_PROBABILITY = _env_float("MODEL_MEDIUM_PROBABILITY", 0.75, 0.0, 1.0)
 
+# --- Modality heuristic (B4) -------------------------------------------------
+# Probability the pixel classifier must reach before it may name a modality for a file whose
+# tags and name say nothing (backend/app/services/modality_model.py). Below it, the old
+# default stands, so an uncertain guess never overrides what the file itself says.
+MODALITY_MIN_PROBABILITY = _env_float("MODALITY_MIN_PROBABILITY", 0.9, 0.5, 1.0)
+
 # --- CORS --------------------------------------------------------------------
 # Comma-separated list. The default is the Vite dev server only: a wildcard combined
 # with credentialed requests is unsafe, so it is no longer part of the default.

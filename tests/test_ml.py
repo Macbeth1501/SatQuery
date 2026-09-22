@@ -396,3 +396,125 @@ def test_only_caption_rows_change_and_images_point_to_the_source():
     assert out[1]["image"] == "../b1_v2/images/b.png"
     assert not V3.FORBIDDEN.search(out[1]["answer"])
     assert report == {"rows": 2, "captions": 1, "dropped_sentences": 1, "dropped_with_area": 0}
+
+
+# ---- B8 domain-gap functions (ml/b8_domain_gap.py; numpy and Pillow only) ---------------------------------
+
+import numpy as np  # noqa: E402
+
+import b8_domain_gap as G  # noqa: E402
+
+
+def test_gsd_normalisation_leaves_a_sentinel_input_untouched():
+    image = np.random.default_rng(0).random((4, 120, 120), dtype=np.float32)
+    assert G.normalise_gsd(image, 10.0) is image  # the live demo's inputs must not change
+
+
+def test_gsd_normalisation_area_averages_a_finer_input():
+    # a 2 m Cartosat-like input made of 5x5 blocks: at 10 m each block becomes one pixel of its own value
+    blocks = np.arange(4 * 24 * 24, dtype=np.float32).reshape(4, 24, 24)
+    fine = blocks.repeat(5, axis=1).repeat(5, axis=2)
+    out = G.normalise_gsd(fine, 2.0)
+    assert out.shape == (4, 24, 24)
+    assert np.allclose(out, blocks, atol=1e-3)
+    with pytest.raises(ValueError):
+        G.normalise_gsd(fine, None)
+
+
+def test_tiles_cover_the_whole_image_at_full_size():
+    image = np.zeros((2, 300, 250), dtype=np.float32)
+    got = G.tiles(image)
+    assert all(t.shape == (2, 120, 120) for _, t in got)
+    assert max(r for (r, _), _ in got) == 180 and max(c for (_, c), _ in got) == 130  # last ones shifted inward
+    small = np.zeros((2, 60, 60), dtype=np.float32)
+    assert len(G.tiles(small)) == 1 and G.tiles(small)[0][1] is small
+
+
+def test_scale_gap_enlarges_the_central_fifth_for_10_to_2_m():
+    image = np.zeros((1, 120, 120), dtype=np.float32)
+    image[:, 48:72, 48:72] = 1.0  # the central 24 px, i.e. 240 m
+    out = G.simulate_scale_gap(image)
+    assert out.shape == (1, 120, 120)
+    assert out[0, 10:110, 10:110].min() > 0.99  # the centre now fills the frame
+
+
+def test_added_looks_reach_the_target_enl():
+    looks = G.added_looks(4.4, 1.0)
+    assert (1 + 1 / 4.4) * (1 + 1 / looks) == pytest.approx(2.0)
+    assert G.added_looks(4.4, 4.4) is None and G.added_looks(1.0, 4.4) is None
+
+
+def test_injected_speckle_gives_single_look_statistics():
+    rng = np.random.default_rng(1)
+    # a uniform field already carrying Sentinel-1 GRDH speckle (ENL 4.4), stored in dB as BigEarthNet does
+    linear = rng.gamma(4.4, 1 / 4.4, size=(2, 400, 400))
+    out_linear = 10 ** (G.inject_speckle(10 * np.log10(linear), rng) / 10)
+    enl = out_linear.mean() ** 2 / out_linear.var()
+    assert enl == pytest.approx(1.0, rel=0.05)
+    same = np.full((1, 4, 4), -12.0, dtype=np.float32)
+    assert np.array_equal(G.inject_speckle(same, rng, source_enl=1.0, target_enl=4.4), same)
+
+
+def test_histogram_matching_needs_a_real_reference():
+    image = np.random.default_rng(2).random((4, 30, 30))
+    with pytest.raises(G.MissingSpecification):
+        G.match_histogram(image)
+    reference = np.random.default_rng(3).normal(500, 50, size=(4, 40, 40))
+    out = G.match_histogram(image, reference)
+    assert out.mean() == pytest.approx(reference.mean(), rel=0.02)
+    # order is kept: matching changes values, not which pixel is brighter
+    assert np.array_equal(np.argsort(out[0].ravel()), np.argsort(image[0].ravel()))
+
+
+def test_unknown_sensor_values_are_flagged_not_invented():
+    carto = G.SPECS["cartosat2s_mx"]
+    for name in carto["flagged"]:
+        assert carto[name] is None
+    assert all("source" in spec for spec in G.SPECS.values())
+
+
+# ---- B1 box-convention verification and the split/quality index (ml/b1_boxes.py, ml/b1_index.py) -----------
+
+import b1_boxes as BB  # noqa: E402
+import b1_index as BI  # noqa: E402
+
+
+def test_box_conventions_are_symmetric_or_not_as_expected():
+    # x0y0x1y1 and x1y1x0y0 describe the SAME box (containment can't tell corner order apart)
+    assert BB.CONVENTIONS["x0y0x1y1"](0.1, 0.2, 0.6, 0.8) == (0.1, 0.2, 0.6, 0.8)
+    assert BB.contains(BB.CONVENTIONS["x1y1x0y0"](0.1, 0.2, 0.6, 0.8), (0.3, 0.5))
+    # a narrow vertical strip (x in [0, 0.1], y in [0, 0.9]): a point at x=0.5 is outside it as written, but
+    # y0x0y1x1 (treating the numbers as row, col, not x, y) swaps the axes into a strip that DOES contain it
+    point = (0.5, 0.05)
+    assert not BB.contains(BB.CONVENTIONS["x0y0x1y1"](0.0, 0.0, 0.1, 0.9), point)
+    assert BB.contains(BB.CONVENTIONS["y0x0y1x1"](0.0, 0.0, 0.1, 0.9), point)
+
+
+def test_contains_uses_min_max_so_corner_order_does_not_matter():
+    assert BB.contains((0.6, 0.8, 0.1, 0.2), (0.3, 0.5))  # corners given "backwards"
+    assert not BB.contains((0.1, 0.2, 0.6, 0.8), (0.9, 0.9))
+
+
+def test_point_and_box_regexes_read_the_parquet_row_format():
+    p = BB.POINT_RE.search("Output a bounding box ... <point>(0.29, 0.8)</point> in the image.")
+    b = BB.BOX_RE.search("[0.06 0.59, 0.51 1.0]")
+    assert (p.group(1), p.group(2)) == ("0.29", "0.8")
+    assert [float(x) for x in b.groups()] == [0.06, 0.59, 0.51, 1.0]
+
+
+def test_neighbourhood_is_a_chebyshev_square_around_the_cell():
+    cells = BI.neighbourhood("SCENE", 10, 10, 1)
+    assert len(cells) == 9
+    assert ("SCENE", 10, 10) in cells and ("SCENE", 11, 11) in cells and ("SCENE", 12, 10) not in cells
+    assert all(scene == "SCENE" for scene, _, _ in cells)
+
+
+def test_quality_matches_b1_slices_proxy_on_known_inputs():
+    blank = np.zeros((3, 4, 4), dtype=np.uint16)
+    nodata, cloud = BI.quality(blank)
+    assert (nodata, cloud) == (1.0, 0.0)  # every pixel is (0, 0, 0): NoData, not bright
+    bright = np.full((3, 4, 4), 4000, dtype=np.uint16)  # mean 4000 >= CLOUD_LIKE_MEAN_DN (2500)
+    nodata, cloud = BI.quality(bright)
+    assert (nodata, cloud) == (0.0, 1.0)
+    dark = np.full((3, 4, 4), 200, dtype=np.uint16)
+    assert BI.quality(dark) == (0.0, 0.0)

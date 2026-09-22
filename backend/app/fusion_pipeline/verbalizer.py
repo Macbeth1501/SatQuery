@@ -1,23 +1,23 @@
-from typing import List
+from typing import Any, List, Optional
 from backend.app.schemas.evidence import BoundingBox, RegionTag
-from backend.app.schemas.task_spec import TaskType
-from backend.app.specialists.scenario_engine import scenario_engine
 
 
 class MultimodalVerbalizer:
-    """Synthesizes grounded multi-modal answers with explicit sensor attribution."""
+    """Synthesizes grounded multi-modal answers with explicit sensor attribution.
+
+    Like the complementarity detector, it never looks up demo content itself (Plan step C0); the router
+    passes `demo` only when the fusion evidence came from the demo engine.
+    """
 
     def verbalize(
         self,
-        query: str,
         boxes: List[BoundingBox],
         region_tags: List[RegionTag],
-        task_type: TaskType = TaskType.FUSION,
+        demo: Optional[Any] = None,
     ) -> str:
-        # Check scenario engine for scenario-tailored verbalization
-        scenario = scenario_engine.get_dynamic_result(query, task_type, [])
-        if scenario.answer_text and "[agreement]" in scenario.answer_text.lower():
-            return scenario.answer_text
+        # The demo scenario's own scripted, modality-attributed text, when it has one.
+        if demo is not None and demo.answer_text and "[agreement]" in demo.answer_text.lower():
+            return demo.answer_text
 
         agreement_count = sum(1 for t in region_tags if t.tag == "agreement")
         sar_only_count = sum(1 for t in region_tags if t.tag == "sar_only")

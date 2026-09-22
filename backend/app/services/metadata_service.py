@@ -18,6 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from backend.app import config
 from backend.app.schemas.image_metadata import ImageMetadata
 
 # Largest side, in pixels, of the display preview returned by render_preview.
@@ -31,6 +32,10 @@ STATS_MAX_SIDE = 512
 # cloud-like. This is an approximation, NOT a cloud-detection model: it flags bright
 # surfaces such as snow, sand and roofs as cloud and misses thin or shadowed cloud.
 CLOUD_BRIGHTNESS_FRACTION = 0.78
+
+# What a readable raster is taken to be when nothing — tags, name, or the B4 pixel classifier — says
+# otherwise. It is a default, not a detection.
+DEFAULT_MODALITY = "optical"
 
 SAR_PLATFORM_HINTS = ("sentinel-1", "sentinel1", "risat", "radarsat", "terrasar", "alos", "sar")
 # Long, distinctive hints match anywhere in the filename; short ones must be whole
@@ -77,14 +82,39 @@ def _format_from_extension(filename: str) -> str:
     return ext
 
 
-def _modality_from_filename(filename: str) -> str:
+def _modality_hint_from_filename(filename: str) -> Optional[str]:
+    """The modality the file name states, or None when it states nothing."""
     lower = filename.lower()
     tokens = set(re.split(r"[^a-z0-9]+", lower))
     if any(term in lower for term in SAR_NAME_SUBSTRINGS) or tokens & set(SAR_NAME_TOKENS):
         return "sar"
     if any(term in lower for term in MULTISPECTRAL_NAME_SUBSTRINGS) or tokens & set(MULTISPECTRAL_NAME_TOKENS):
         return "multispectral"
-    return "optical"
+    return None
+
+
+def _modality_from_filename(filename: str) -> str:
+    """The old behaviour: the name's hint, or "optical" as the default when it has none."""
+    return _modality_hint_from_filename(filename) or DEFAULT_MODALITY
+
+
+def _modality_from_pixels(src: Any) -> Optional[str]:
+    """B4: optical or SAR from a decimated read, for a file whose tags and name say nothing. None when the
+    classifier is not confident enough, or has not been fitted, or the read fails."""
+    import numpy as np
+
+    from backend.app.services import modality_model
+
+    try:
+        scale = max(src.width, src.height) / STATS_MAX_SIDE
+        out_h = max(1, int(src.height / scale)) if scale > 1 else src.height
+        out_w = max(1, int(src.width / scale)) if scale > 1 else src.width
+        bands = list(range(1, min(src.count, 4) + 1))
+        data = np.asarray(src.read(bands, out_shape=(len(bands), out_h, out_w)))
+        label, _probability = modality_model.predict(data, config.MODALITY_MIN_PROBABILITY)
+        return label
+    except Exception:
+        return None
 
 
 def _normalize_timestamp(raw: str) -> Optional[str]:
@@ -209,7 +239,7 @@ class MetadataService:
             image_id=f"img_{index}_{Path(file_path).stem}",
             name=filename,
             format=_format_from_extension(filename),
-            detected_modality=_modality_from_filename(filename),
+            detected_modality=_modality_hint_from_filename(filename) or DEFAULT_MODALITY,
             demo_input=Path(filename).name in DEMO_INPUT_NAMES,
         )
         try:
@@ -308,8 +338,15 @@ class MetadataService:
                     metadata.acquisition_timestamp = _normalize_timestamp(acquired)
 
                 platform = (_first_tag(tags, PLATFORM_TAGS) or "").lower()
-                if platform and any(hint in platform for hint in SAR_PLATFORM_HINTS):
+                tag_says_sar = bool(platform) and any(hint in platform for hint in SAR_PLATFORM_HINTS)
+                if tag_says_sar:
                     metadata.detected_modality = "sar"
+                elif _modality_hint_from_filename(metadata.name) is None:
+                    # Neither the tags nor the name decide, so the old code fell back to "optical" for every
+                    # such file. Ask the pixels instead (B4); it stays quiet unless it is confident.
+                    from_pixels = _modality_from_pixels(src)
+                    if from_pixels:
+                        metadata.detected_modality = from_pixels
 
                 nodata, cloud = _stats(src)
                 metadata.nodata_percent = round(nodata, 2)

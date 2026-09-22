@@ -1,6 +1,6 @@
 # Plan: the 10 remaining ML capabilities (B1-B4, B6-B10, B12)
 
-**Status: approved by the owner 2026-09-22. Nothing in it has started. Begin at Phase 0, B2.** Sequencing detail
+**Status: approved by the owner 2026-09-22. Phase 0 is done: B2 (G-B2 passed), C0, B8 functions, and now B4 fitted (beats the always-optical baseline on every rendering, 92.9% overall, 10.2 ms/call). Phase 1 (B1 full ingestion) is done: 549,488 patches per modality, the official split plus buffer index, the 5%-cloud cap, and the box-row extraction with the `[x0 y0, x1 y1]` convention confirmed before B6 trains. Next: phase 2's B9 go/no-go. Progress lives in `docs/PROGRESS_LOG.md`.** Sequencing detail
 for Track B of `docs/SatQuery_AI_Development_Plan.md` §10.5; where the two disagree, this file carries the owner's
 later decisions (B9 moved early, full B1 ingestion, Kaggle and laptop in parallel).
 

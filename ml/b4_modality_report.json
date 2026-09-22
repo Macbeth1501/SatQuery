@@ -1,0 +1,116 @@
+{
+  "feature_names": [
+    "bands_1",
+    "bands_2",
+    "bands_3",
+    "bands_4plus",
+    "is_float",
+    "negative_share",
+    "replicated_bands",
+    "lag1_autocorrelation",
+    "high_frequency_share",
+    "local_cv",
+    "skewness",
+    "band_correlation"
+  ],
+  "classes": {
+    "0": "optical",
+    "1": "sar"
+  },
+  "mean": [
+    0.2,
+    0.2,
+    0.4,
+    0.2,
+    0.3,
+    0.0998988136574074,
+    0.2,
+    0.8133313587160887,
+    0.2373832183236937,
+    0.18562385404234524,
+    0.44285649318448606,
+    0.7065770023098642
+  ],
+  "scale": [
+    0.3999999999999716,
+    0.39999999999999175,
+    0.4898979485565301,
+    0.39999999999995756,
+    0.45825756949558005,
+    0.2996994778715703,
+    0.3999999999999716,
+    0.1397255327095484,
+    0.11250892373104818,
+    0.07944168112434447,
+    1.319928294978033,
+    0.33421823833200126
+  ],
+  "coef": [
+    1.0171972027069804,
+    4.366274670902166,
+    -0.40453894970736826,
+    -4.888014869677372,
+    1.1056318376426562,
+    0.0755090298927423,
+    1.3470743413354878,
+    0.5030123533282278,
+    0.014832801320732659,
+    0.43868356369810396,
+    -2.4793683581828163,
+    -2.4278808885266394
+  ],
+  "intercept": 0.7587312186744701,
+  "fitted_on": {
+    "pool": "data/b1_full (BigEarthNet S2 = optical, S1 = SAR)",
+    "split": "official",
+    "train_patches": 6000,
+    "test_patches": 3000,
+    "renderings": [
+      "native",
+      "rgb8",
+      "gray8",
+      "gray_rep3",
+      "linear"
+    ]
+  },
+  "evaluation": {
+    "overall": {
+      "n": 15000,
+      "accuracy": 0.9292666666666667,
+      "baseline_always_optical": 0.5
+    },
+    "native": {
+      "n": 3000,
+      "accuracy": 1.0,
+      "sar_recall": 1.0,
+      "optical_recall": 1.0
+    },
+    "rgb8": {
+      "n": 3000,
+      "accuracy": 0.935,
+      "sar_recall": 0.9273333333333333,
+      "optical_recall": 0.9426666666666667
+    },
+    "gray8": {
+      "n": 3000,
+      "accuracy": 0.8556666666666667,
+      "sar_recall": 0.9306666666666666,
+      "optical_recall": 0.7806666666666666
+    },
+    "gray_rep3": {
+      "n": 3000,
+      "accuracy": 0.8556666666666667,
+      "sar_recall": 0.9306666666666666,
+      "optical_recall": 0.7806666666666666
+    },
+    "linear": {
+      "n": 3000,
+      "accuracy": 1.0,
+      "sar_recall": 1.0,
+      "optical_recall": 1.0
+    }
+  },
+  "note": "Fitted on Sentinel-1/2 only; Cartosat/RISAT textures are outside its training. The baseline is what metadata_service does for a file with no tag and no name hint: always 'optical'.",
+  "fitted_at": "2026-09-23 01:22",
+  "feature_ms_per_call_on_test": 10.154
+}

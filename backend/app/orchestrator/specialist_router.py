@@ -9,7 +9,7 @@ from backend.app.schemas.task_spec import TaskSpec, TaskType
 from backend.app.services import model_client
 from backend.app.specialists.change_vqa import ChangeVqaSpecialist
 from backend.app.specialists.grounding import GroundingSpecialist
-from backend.app.specialists.scenario_engine import DEMO_GROWTH_SQM
+from backend.app.specialists.scenario_engine import DEMO_GROWTH_SQM, scenario_engine
 from backend.app.specialists.vqa_caption import VqaCaptionSpecialist
 
 
@@ -29,15 +29,27 @@ class SpecialistRouter:
         images: List[ImageMetadata],
         session_id: str,
         trace: Optional[TraceEmitter] = None,
-    ) -> Tuple[List[EvidenceItem], str, List[BoundingBox], List[RegionTag], Optional[Dict[str, Any]]]:
-        """The fifth value is the model server's reply when a trained adapter answered, else None."""
+    ) -> Tuple[
+        List[EvidenceItem], str, List[BoundingBox], List[RegionTag], Optional[Dict[str, Any]], Optional[Tuple[str, str]]
+    ]:
+        """The fifth value is the model server's reply when a trained adapter answered, else None. The sixth is
+        the demo scenario's (tier, rationale) when the demo engine produced the evidence, else None.
+
+        This is the only place outside the specialists that reads the scenario engine (Plan step C0): the
+        complementarity detector, verbalizer and confidence scorer receive demo content from here, and only
+        on a demo path. A path served by a real model passes them nothing scripted.
+        """
         items: List[EvidenceItem] = []
         boxes: List[BoundingBox] = []
         region_tags: List[RegionTag] = []
         answer_text = ""
         model_result: Optional[Dict[str, Any]] = None
+        query = task_spec.question_text or ""
 
         tt = task_spec.task_type
+        # Every path below except 5a is still served by the demo engine. On 5a the engine is not even read.
+        on_model_path = tt in [TaskType.SINGLE_VQA, TaskType.SINGLE_CAPTION] and model_client.is_enabled()
+        demo = None if on_model_path else scenario_engine.get_dynamic_result(query, tt, images)
 
         # 1. Compound: FUSION_THEN_CHANGE
         if tt == TaskType.FUSION_THEN_CHANGE:
@@ -61,10 +73,13 @@ class SpecialistRouter:
                     parameters={"modality_stream": "cross-modal"},
                 )
 
+            # Fusion has no trained model yet (B9/B10), so the demo fusion scenario feeds the detector and the
+            # verbalizer; C3 adds the trained / rule_based switch here.
+            fusion_demo = scenario_engine.get_dynamic_result(query, TaskType.FUSION, images)
             detected_tags = self.complementarity_detector.detect_tags(
                 optical_boxes=boxes,
                 sar_boxes=boxes,
-                query=task_spec.question_text or "",
+                demo=fusion_demo,
             )
             region_tags.extend(detected_tags)
             if trace:
@@ -75,9 +90,9 @@ class SpecialistRouter:
                 )
 
             fusion_answer = self.verbalizer.verbalize(
-                query=task_spec.question_text or "",
                 boxes=boxes,
                 region_tags=region_tags,
+                demo=fusion_demo,
             )
 
             # Stage 2: Temporal Change
@@ -123,10 +138,11 @@ class SpecialistRouter:
                     output_summary=f"Localised {len(boxes)} multi-sensor target candidates",
                 )
 
+            # No trained fusion model yet (B9/B10): the demo scenario feeds both; C3 adds the switch here.
             region_tags = self.complementarity_detector.detect_tags(
                 optical_boxes=boxes,
                 sar_boxes=boxes,
-                query=task_spec.question_text or "",
+                demo=demo,
             )
             if trace:
                 trace.add_step(
@@ -136,9 +152,9 @@ class SpecialistRouter:
                 )
 
             answer_text = self.verbalizer.verbalize(
-                query=task_spec.question_text or "",
                 boxes=boxes,
                 region_tags=region_tags,
+                demo=demo,
             )
             if trace:
                 trace.add_step(
@@ -201,7 +217,7 @@ class SpecialistRouter:
         # 5a. SINGLE_VQA & SINGLE_CAPTION answered by the trained adapter (SATQUERY_VQA_MODEL_URL set).
         # No grounding call follows: the adapter produces no boxes, and the demo grounding specialist
         # would draw invented ones on a real image.
-        elif tt in [TaskType.SINGLE_VQA, TaskType.SINGLE_CAPTION] and model_client.is_enabled():
+        elif on_model_path:
             v_item, model_result = await self.vqa_specialist.answer_with_model(images, task_spec, session_id)
             items.append(v_item)
             answer_text = v_item.answer_text or ""
@@ -258,4 +274,5 @@ class SpecialistRouter:
                         output_summary=summary,
                     )
 
-        return items, answer_text, boxes, region_tags, model_result
+        demo_confidence = (demo.confidence_tier, demo.confidence_rationale) if demo is not None else None
+        return items, answer_text, boxes, region_tags, model_result, demo_confidence

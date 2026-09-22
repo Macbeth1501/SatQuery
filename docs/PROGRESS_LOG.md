@@ -35,7 +35,7 @@ inference layer is stubbed.
 | Pillow bounding-box and change-mask overlays | Complete |
 | Session persistence | Complete — SQLite (see the datastore row below); legacy `response.json` files are imported on first read |
 | React frontend, 3 routes, 15 components | Complete, verified in-browser |
-| Test suite: 213 pytest + 73 Vitest tests | All passing (29 in `tests/test_ml.py`, some of which skip when scikit-learn, scipy or torch are missing; `tests/test_real_model.py` and `tests/test_inspect.py` need no GPU) |
+| Test suite: 244 pytest + 73 Vitest tests | All passing (42 in `tests/test_ml.py`, some of which skip when scikit-learn, scipy or torch are missing; `tests/test_real_model.py` and `tests/test_inspect.py` need no GPU) |
 | Demo inputs | Seven georeferenced GeoTIFFs in `frontend/public/demo/` (scenarios A, C, D, E, and G which reuses C's pair reversed); B and F stay plain PNGs on purpose. Georeferencing is real, the pictures are synthetic |
 | ML training side (`ml/`) | B1 thin slice built and verified; B5 LoRA train/eval/notebook written; baseline evaluated; **run 1 (old leaky slice, `data/b5_run1/adapter_final`) showed no evidence of image reading; run 2 (leak-neutral `data/b1_v2`, 300 steps in 1 h 43 min, `data/b5_run2/adapter_final`) passes the pre-registered test on `bench_hard` main (+6.1 binary, +8.6 mcq over text-only) but its binary lead is gone on held-out tiles (held-out mcq keeps +8.6); run 3 (`data/b1_v3`, captions without country/season/climate, full epoch, 1,218 steps, `data/b5_run3/adapter_final`) scored 2026-09-22: beats run 2 on every pre-registered measure and, unlike run 2, its binary lead generalises to held-out tiles (+9.4 vs run 2's -0.5); free-form no longer names a country/season, but on the 5 curated live-demo cards it scores 13/23 vs run 2's 23/23 (those cards were picked because run 2 got them right, so this is expected on a biased sample, not a regression on the real bench). **Owner decided (2026-09-22) not to swap it into the live demo — cherry-picking new cards for run 3 would repeat the same bias, not fix it. Run 2 stays live; run 3 is the model of record for bench_hard numbers.** Not wired into the backend otherwise. `tests/test_ml.py` (26 tests) covers the CPU-side pieces (option parser, text-only baseline, raking, sampler, McNemar, answer parser, change rate, resumable training state on a toy model); training, extraction and GPU evaluation have no automated tests |
 | **Specialist inference** | **Dummy — `ScenarioEngine` lookup — except single-image VQA/captioning when `SATQUERY_VQA_MODEL_URL` is set: real adapter over HTTP (`ml/serve_vqa.py`), verified live 2026-09-21. Since 2026-09-22 (B2) the server keeps several adapters resident (run 2 and run 3 by default) and the backend names one with `SATQUERY_VQA_MODEL_ADAPTER` (default `run2`) through `POST /infer`** |
@@ -68,11 +68,20 @@ fusion query, returning HTTP 200 with a full trace rather than an error.
 
 ## Next step
 
-**Newest (2026-09-22, B2 done): Phase 0, B2 is done and passed its gate (G-B2); B1's 10k-patch disk measurement
-is done (about 96 GiB for the full pool, which fits). Next, still Phase 0 of `docs/ML_PLAN.md`: B4 (modality
-heuristic), the B8 domain-gap function and C0 (scenario-engine calls off the real-model paths). B1's full
-ingestion can start in the background alongside them once `ml/b1_full.py` gains the split, the cloud cap, the box
-rows and a decision on the 7.2% of S1 patches with no BigEarthNet.txt row (see the History entry).**
+**Newest (2026-09-23): Phase 0 and Phase 1 of `docs/ML_PLAN.md` are both done.** B1's full ingestion finished
+both archives: 549,488 patches each, S2 61 GB / S1 32 GB. **85,444 patches (15.5%) in each archive have no
+BigEarthNet.txt row at all** — the same set both ways, i.e. these patches were simply never part of
+BigEarthNet.txt's curated annotations, not a join gap; kept regardless (owner decision), as real S1/S2 pairs for
+B9. The split index (464,044 annotated patches, 199,279 usable `train` after the 2-cell buffer), the 5%-cloud cap
+(81,987 of 549,488 dropped, 0 for NoData), and box-row extraction (all 2,205,686 rows map to a stored patch) are
+all built. **The `[x0 y0, x1 y1]` box convention is confirmed** before B6 trains, as the plan required: 20,000
+sampled `point`-category rows, 100% contained by the box read exactly as written, every alternative axis reading
+far below, plus a visual spot-check. **B4 is fitted**: it beats the always-optical baseline (50%) on every
+rendering it was tested on — 100% on native/linear, 93.5% on 8-bit RGB, 85.6% on 8-bit grey, 92.9% overall on
+1,500 held-out `test`-split patches per class — at 10.2 ms/call, well under the 100 ms budget. B2 (G-B2 passed) and
+C0 also done. 244 pytest tests pass throughout, including the demo parity check, unaffected by the real model file
+now on disk. Next: phase 2's B9 go/no-go (the plan's highest-risk item, a time-boxed test) — read the Kaggle
+account's real limits, then the 20-step timing comparison the plan requires before any training run.**
 
 (Superseded, 2026-09-22, late:) the plan for the 10 remaining ML capabilities is written and approved —
 `docs/ML_PLAN.md`. Next step: Phase 0, B2: extend `ml/serve_vqa.py` so run 2 and run 3 stay loaded together, with
@@ -343,6 +352,130 @@ Accepted for the prototype, not defects to fix now:
 ---
 
 ## History
+
+### 2026-09-23 — B1 full ingestion done; B4 fitted and beats the baseline; Phase 0 and Phase 1 both closed
+
+**S2 finished ingesting**, completing B1's full pool: 549,488 patches, 61 GB, in 1h 57m
+(`ml/b1_full_ingest_s2.json`, close to the projected 2.0 h). Combined with S1 (33.8 GB), the pool is about 93 GiB,
+close to the 96 GiB projection. **The two archives' "no BigEarthNet.txt row" patches are the same set**: checked
+directly against the parquet's own distinct patch_id count (464,044, all with a non-null split) against the
+archive's 549,488 -- the difference is exactly 85,444, matching both S1's and S2's counts. So these patches were
+never part of BigEarthNet.txt's curated annotation set for either modality, not a mapping gap specific to the
+S1-name join; kept regardless (owner decision), as real co-registered S1/S2 pairs for B9.
+
+**`ml/b1_index.py quality` and `boxes` ran to completion** once S2 was there to read. Quality (the 5%-cloud cap,
+same proxy as `b1_slice.py`): of 549,488 patches, 81,987 (14.9%) dropped for cloud-likeness, 0 for NoData;
+per-split counts are in `data/b1_full/quality_report.json` (e.g. `train`: 199,279 in, 190,570 kept). Boxes: all
+2,205,686 `bounding box` rows in the parquet map to a stored S2 patch (`data/b1_full/boxes.jsonl`); restricting to
+the bench-subset patches used for the earlier visual spot-check gives exactly 1,582 rows, matching the count
+`docs/ML_PLAN.md` had already cited for B6 -- a useful cross-check that the citation and this extraction describe
+the same intersection, not two different countings.
+
+**B4 fitted for real, on the finished pool.** `ml/b4_modality.py fit --train 6000 --test 3000` (half optical
+S2, half SAR S1, split by the official `train`/`test` labels so no patch is scored that was also fitted on):
+**it beats the always-optical baseline (50%) on every rendering, with none of the test patches used in
+fitting** -- native and float-linear renderings 100.0%, 8-bit RGB (S2 true colour / S1 VV-VH-difference false
+colour) 93.5%, 8-bit grey (with or without 3-channel replication, which score identically since replication adds
+no information) 85.6%; overall 92.9% across all five renderings and 3,000 held-out patches. Feature extraction
+costs 10.2 ms per call (`ml/b4_modality_report.json`), well under the 100 ms budget the plan sets. The fitted
+model (`backend/app/services/modality_model.json`) is now what the wired call site actually uses; 244 pytest
+tests still pass, including `test_demo_parity.py`, so a real model on disk changed no existing behaviour.
+
+**Phase 0 and Phase 1 of `docs/ML_PLAN.md` are both closed.** Phase 0: B2 (G-B2 passed), C0, the B8 domain-gap
+functions, and now B4, all done. Phase 1: B1's full ingestion, split index, quality filter and box extraction, all
+done, with the box convention confirmed before B6 needs it. Next: Phase 2, the B9 go/no-go -- the plan's
+highest-risk item and the reason it was moved early. Its first concrete step, per the plan's Kaggle rules: read
+the account's real weekly-hours/session-length/dataset-size limits (assumed by nothing so far), then the 20-step
+timing comparison against a local run, before any training starts.
+
+### 2026-09-23 — B1: S1 ingestion finished, split index built at full scale, box convention confirmed
+
+**S1 ingestion finished.** 549,488 patches, 33.8 GB, in 1h 1m (`ml/b1_full_ingest_s1.json`). **85,444 of them
+(15.5%) have no BigEarthNet.txt row**, well above the 10k-patch sample's 7.2% — that measurement undercounted the
+full archive's rate, worth remembering if a future disk estimate leans on a small sample again. Kept under their
+`s1:` key per the owner's decision, as real S1/S2 pairs for B9. S2 ingestion continues (about 55% through by the
+time of this entry, roughly on the 2.2 h projection).
+
+**Split index built at full scale.** New `ml/b1_index.py split` (parquet only, so it does not wait on S2)
+reapplies `ml/b1_slice.py`'s exact rule — official labels kept, plus a 2-cell buffer removing `train` patches
+within Chebyshev distance 2 of a `validation` or `bench` patch — over all 464,044 officially-split patches:
+229,114 `train`, 118,095 `validation`, 115,753 `test`, 1,082 `bench`; 29,835 of the `train` patches (13%) fall
+inside the buffer and are marked `train_buffered_out`, leaving 199,279 usable. `test` is not buffered against,
+matching `b1_slice.py`'s own choice; this is flagged in `ml/b1_index.py`'s docstring and report rather than
+silently carried forward, since nothing in this project has scored against `test` yet (`bench_hard` uses `bench`).
+Output: `data/b1_full/split.json` (patch -> label) and `split_report.json` (the counts above).
+
+**Box convention confirmed before B6 trains, as the plan required.** `BigEarthNet.txt.parquet` has 2,205,686
+`type == "bounding box"` rows; half are `category == "point"`, where the prompt names a point the box must
+contain — a ground truth every other row category lacks. New `ml/b1_boxes.py verify` tested every plausible axis
+reading of `"[a b, c d]"` against 20,000 sampled point rows: read exactly as written — `x0y0x1y1`, x horizontal, y
+vertical, origin top-left, no swap or flip — the box contains its point 100.0% of the time, and the two numbers
+are already given top-left-first in 100.0% of rows (checked separately, since plain containment cannot tell
+"[a b, c d]" from "[c d, a b]" — swapping which corner comes first doesn't change the box's extent, so that
+alone can't rule out a reversed-corner convention). Every other axis reading tested (treating the numbers as row,
+col rather than x, y; treating y as measured from the bottom) scored below 40%. `ml/b1_boxes.py draw` then drew a
+fresh sample on real bench-subset GeoTIFFs for a visual check (viewed directly): a "smallest contiguous area of
+industrial or commercial units" box landed on an actual small grey rooftop near a road junction, and a
+point-anchored box landed on the field containing its named coordinate. `ml/b1_index.py boxes` (extraction into
+`data/b1_full/boxes.jsonl`, once S2 finishes) found 1,582 box rows on the bench-subset patches used for the
+visual check — exactly the count `docs/ML_PLAN.md` had already cited for B6, confirming that citation was this
+same intersection.
+
+**Still waiting on S2:** `ml/b1_index.py quality` (the 5%-cloud cap, `pairs_in`/`pairs_kept` per split) and
+`boxes` are written but need pixel reads from the S2 store; a Windows LMDB reader cannot follow a store that is
+still growing, so both wait for ingestion to finish, as does the B4 fit. 244 pytest tests pass (5 new, covering
+the box-convention helpers, `neighbourhood`, and the quality proxy on known inputs).
+
+### 2026-09-22 — Phase 0: C0 done, B8 domain-gap function done, B4 written and wired (not fitted), B1 ingesting
+
+**C0 — the scenario-engine leaks are closed.** `ConfidenceScorer`, `ComplementarityDetector` and
+`MultimodalVerbalizer` no longer import or call `scenario_engine`; a static test asserts they never will again.
+Demo content now travels with demo evidence: the router is the single place that reads the engine, and it passes
+`demo=` to the detector and verbalizer and a `demo_confidence` tuple to the scorer. On a path served by a real
+model the router does not read the engine at all, so a scripted tier or wording cannot re-rate or reword a real
+answer. Without demo content the detector and verbalizer fall back to their own rule-based output. The change
+surfaced its own justification: the first version looked the scenario up before the path was known, and the
+real-model tests (whose fixture booby-traps the engine) failed immediately. 6 new tests in
+`tests/test_scenario_isolation.py`; `tests/test_demo_parity.py` still passes unchanged, so no demo output moved.
+
+**B8 (M6) part 1 — the domain-gap functions.** New `ml/b8_domain_gap.py`, numpy and Pillow only so `backend/`
+can import it later. Two uses kept apart, as M6 asks:
+- Always-on at inference: `normalise_gsd` (identity on a 10 m Sentinel input, area-averaging a finer one, never
+  sharpening) and `tiles` (120 px = 1.2 km tiles, edges shifted inward to stay full size).
+- Stress test only: `simulate_scale_gap` (the central 24 px of a patch enlarged to full frame, which is the field
+  of view a 2 m Cartosat tile of the same pixel size would have), `inject_speckle` (gamma speckle taking
+  Sentinel-1 GRDH's ENL 4.4 to RISAT's single look, in dB as BigEarthNet stores it), and `match_histogram`.
+Sensor numbers are quoted from published specifications and cited in `SPECS`: Sentinel-1 IW GRDH 10 m spacing,
+20.4 x 22.5 m resolution, ENL 4.4 (Copernicus SentiWiki); RISAT-1 FRS-1 3 x 2 m, single look except CRS, 5.35 GHz
+(eoPortal); Cartosat-2S PAN 0.65 m / MX 2 m in four bands matching S2's B02/B03/B04/B08 (eoPortal). **Two values
+no source gives are flagged, not invented:** Cartosat's quantisation bit depth and its radiometric histogram, so
+`match_histogram` refuses to run without a real Cartosat reference image rather than using a made-up curve. The
+honest limits are in the module docstring: it cannot add detail Sentinel never recorded, and it does not model
+RISAT's finer resolution, only its speckle. 8 tests, including that the injected speckle really lands at ENL 1.0
+within 5%. **Appendix A #13 resolved** per the approved plan: the normalisation applies to every specialist call,
+at C2's shared entry point — not wired yet, because C2's shared entry point does not exist yet.
+
+**B4 (M9) — written, wired, and honestly not finished.** `backend/app/services/modality_model.py` holds the
+feature function and a JSON-coefficient logistic regression (no new backend dependency; scikit-learn is used only
+to fit, in `.venv-ml`), and `ml/b4_modality.py` fits and scores it. It is consulted at exactly one place: a file
+whose tags and name both say nothing, where the old code silently defaulted to "optical" for everything. Below
+`SATQUERY_MODALITY_MIN_PROBABILITY` (new, default 0.9) it answers None and that old default stands; a classifier
+that raises is caught and the rest of the metadata is still read. The fitting design is what makes this
+non-trivial: raw S2 vs S1 is separable by dtype alone, which proves nothing, so each patch is presented in five
+renderings (native, 8-bit RGB, 8-bit grey, grey replicated to 3 bands, float) and the 12 features are
+dtype-independent texture and band statistics. The baseline is what the service does today for such a file:
+always "optical", i.e. right on exactly the optical half. 12 tests in `tests/test_modality_model.py`.
+**No model is fitted yet** (`modality_model.json` does not exist, so the call site is a no-op), because fitting
+needs the B1 pool.
+
+**B1 full ingestion started** (owner decision: keep the 7.2% of S1 patches with no BigEarthNet.txt row, under
+their `s1:` key, as B9 pairs). `ml/b1_full.py` gained a resumable `ingest` command; the scratch measurement store
+was deleted as the owner asked. Two things were fixed for the long run: the LMDB map now grows in fixed 4 GiB
+steps rather than doubling (on Windows the file is the map size, so doubling a 64 GiB store would ask for 128 GiB
+and the two stores together would not fit), and a reader must open the store with a large map or it fails with
+`MDB_PAGE_NOTFOUND` once the writer passes it — on Windows a reader cannot follow a store that is still growing,
+which is why the B4 fit waits for the ingestion to finish. Both archives are streaming in parallel (S2 about
+2.2 h, S1 about 1 h by the measured rates); AC/DC sleep was disabled first. 239 pytest tests pass.
 
 ### 2026-09-22 — B2: multi-adapter serving done and its gate passed; B1 disk use measured on 10k patches
 

@@ -1,0 +1,14 @@
+{
+  "rows_sampled": 20000,
+  "rows_parsed": 20000,
+  "containment_rate": {
+    "x0y0x1y1": 1.0,
+    "y0x0y1x1": 0.3991,
+    "x0y0x1y1_yflip": 0.2601,
+    "x1y1x0y0": 1.0
+  },
+  "already_written_top_left_first": 1.0,
+  "conclusion": "x0y0x1y1",
+  "seconds": 0.1,
+  "checked_on": "2026-09-23"
+}

@@ -1,25 +1,26 @@
-from typing import List, Tuple
+from typing import Any, List, Optional
 from backend.app.schemas.evidence import BoundingBox, RegionTag
-from backend.app.schemas.task_spec import TaskType
-from backend.app.specialists.scenario_engine import scenario_engine
 
 
 class ComplementarityDetector:
-    """Detects multi-modal sensor agreement vs single-sensor complementarity."""
+    """Detects multi-modal sensor agreement vs single-sensor complementarity.
+
+    It never looks up demo content itself (Plan step C0): the router passes the demo scenario's result as
+    `demo` only when the fusion evidence came from the demo engine, so a real detector's call site cannot be
+    silently overridden by scripted tags.
+    """
 
     def detect_tags(
         self,
         optical_boxes: List[BoundingBox],
         sar_boxes: List[BoundingBox],
-        query: str,
-        task_type: TaskType = TaskType.FUSION,
+        demo: Optional[Any] = None,
     ) -> List[RegionTag]:
-        """Classifies regions into agreement, optical_only, and sar_only."""
-        scenario = scenario_engine.get_dynamic_result(query, task_type, [])
-        if scenario.region_tags:
-            return scenario.region_tags
+        """Classifies regions into agreement, optical_only, and sar_only. `demo`: a scenario_engine result."""
+        if demo is not None and demo.region_tags:
+            return demo.region_tags
 
-        # Fallback multi-sensor tags
+        # Rule-based multi-sensor tags
         return [
             RegionTag(
                 region="Primary Target Feature",

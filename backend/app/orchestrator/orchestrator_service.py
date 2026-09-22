@@ -82,7 +82,7 @@ class OrchestratorService:
             return response
 
         # Step 3: Specialist Routing & Execution
-        items, answer_text, boxes, region_tags, model_result = await self.specialist_router.route_and_execute(
+        items, answer_text, boxes, region_tags, model_result, demo_confidence = await self.specialist_router.route_and_execute(
             task_spec, images, session_id, trace=trace
         )
 
@@ -128,6 +128,7 @@ class OrchestratorService:
             quantity_discrepancy=qty_discrepancy,
             verifier_rationale=verifier_rationale,
             model_result=model_result,
+            demo_confidence=demo_confidence,
         )
 
         # Step 7: Response Assembly

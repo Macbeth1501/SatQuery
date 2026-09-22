@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from backend.app.config import (
     HIGH_INTENT_CONFIDENCE,
     MODEL_MEDIUM_PROBABILITY,
@@ -7,11 +7,15 @@ from backend.app.config import (
 from backend.app.schemas.api_models import Confidence, ConfidenceDetails
 from backend.app.schemas.image_metadata import ImageMetadata
 from backend.app.schemas.task_spec import TaskSpec
-from backend.app.specialists.scenario_engine import scenario_engine
 
 
 class ConfidenceScorer:
-    """Computes auditable confidence tier and scenario-aware rationale."""
+    """Computes auditable confidence tier and rationale.
+
+    It never looks up demo content itself (Plan step C0). A scripted tier reaches it only as
+    `demo_confidence`, which the router supplies only when the evidence came from the demo engine, so a
+    real specialist's answer can never be re-rated with a canned rationale.
+    """
 
     def compute(
         self,
@@ -22,7 +26,9 @@ class ConfidenceScorer:
         quantity_discrepancy: bool,
         verifier_rationale: str,
         model_result: Optional[Dict[str, Any]] = None,
+        demo_confidence: Optional[Tuple[str, str]] = None,
     ) -> Confidence:
+        """`demo_confidence`: (tier, rationale) of the demo scenario that produced the evidence, else None."""
         details = ConfidenceDetails(
             geometry_check=geometry_ok,
             cross_tool_agreement=agreement_ok,
@@ -42,20 +48,14 @@ class ConfidenceScorer:
             rationale = f"Optical imagery degraded by {avg_cloud:.1f}% cloud obscuration without radar penetration."
             return Confidence(tier=tier, rationale=rationale, details=details)
 
-        # A trained adapter answered: the tier comes from the model's own probability, and the
-        # scenario engine is never consulted (Plan step C0, for this path).
+        # A trained adapter answered: the tier comes from the model's own probability.
         if model_result is not None:
             return self._from_model(model_result, details)
 
-        # Scenario-specific calibrated confidence
-        query = task_spec.question_text or ""
-        scenario = scenario_engine.get_dynamic_result(query, task_spec.task_type, images)
-        if scenario.confidence_rationale:
-            return Confidence(
-                tier=scenario.confidence_tier,
-                rationale=scenario.confidence_rationale,
-                details=details,
-            )
+        # The demo engine produced the evidence: its scripted tier and rationale.
+        if demo_confidence is not None and demo_confidence[1]:
+            tier, rationale = demo_confidence
+            return Confidence(tier=tier, rationale=rationale, details=details)
 
         # Standard baseline calibration
         if geometry_ok and agreement_ok and task_spec.intent_confidence >= HIGH_INTENT_CONFIDENCE:
